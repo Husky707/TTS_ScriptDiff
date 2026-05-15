@@ -1,0 +1,1161 @@
+--[[ Lua code. See documentation: http://berserk-games.com/knowledgebase/scripting/ --]]
+
+function getHelperClient(helperObjectName)
+    local function getHelperObject()
+        for _, object in ipairs(getAllObjects()) do
+            if object.getName() == helperObjectName then return object end
+        end
+        error('missing object "' .. helperObjectName .. '"')
+    end
+    -- Nested tables are considered cross script.  Make a local copy.
+    local function copyTable(t)
+        if t and type(t) == 'table' then
+            local copy = {}
+            for k, v in pairs(t) do
+                copy[k] = type(v) == 'table' and copyTable(v) or v
+            end
+            t = copy
+        end
+        return t
+    end
+    local helperObject = false
+    local function getCallWrapper(functionName)
+        helperObject = helperObject or getHelperObject()
+        if not helperObject.getVar(functionName) then error('missing ' .. helperObjectName .. '.' .. functionName) end
+        return function(parameters) return copyTable(helperObject.call(functionName, parameters)) end
+    end
+    return setmetatable({}, { __index = function(t, k) return getCallWrapper(k) end })
+end
+
+local _deckHelper = getHelperClient('TI4_DECK_HELPER')
+local _gameDataHelper = getHelperClient('TI4_GAME_DATA_HELPER')
+local _factionHelper = getHelperClient('TI4_FACTION_HELPER')
+local _setupHelper = getHelperClient('TI4_SETUP_HELPER')
+local _systemHelper = getHelperClient('TI4_SYSTEM_HELPER')
+local _zoneHelper = getHelperClient('TI4_ZONE_HELPER')
+
+-------------------------------------------------------------------------------
+
+-- Swap hovered/selected tokens, platic, and/or groups.
+-- @author original by GarnetBear October 18, 2019
+-- @author updated by Darrell May 2020 to merge groups, revisited January 2021 to simplify.
+local SwapSplitJoin = {
+    -- Map from replaceable object name to bag name.
+    OBJECTNAME_TO_BAGNAME = {
+        ['x1 Fighter Token'] = 'x1 Fighter Tokens Bag',
+        ['x3 Fighter Token'] = 'x3 Fighter Tokens Bag',
+        ['x1 Infantry Token'] = 'x1 Infantry Tokens Bag',
+        ['x3 Infantry Token'] = 'x3 Infantry Tokens Bag',
+        ['x1 Commodities/Tradegoods'] = 'x1 Commodities/Tradegoods Bag',
+        ['x3 Commodities/Tradegoods'] = 'x3 Commodities/Tradegoods Bag',
+        ['!COLOR Fighter'] = '!COLOR Fighter',
+        ['!COLOR Infantry'] = '!COLOR Infantry'
+    },
+
+    -- Replace consumed items with produced items.  Repeatable entries happen as
+    -- much as possible from the input, and ONLY IF no repeatable do the first
+    -- non-repeatable (eagerly group, cautiously break apart).  Plastic color is
+    -- mandated by the player doing the 'r' randomizing for safety/simplicity.
+    REPLACE_RULES = {
+        {
+            repeatable = true,
+            consume = { count = 3, items = { 'x1 Fighter Token', '!COLOR Fighter' }},
+            produce = { item = 'x3 Fighter Token' },
+        },
+        {
+            repeatable = true,
+            consume = { count = 3, items = { 'x1 Infantry Token', '!COLOR Infantry' }},
+            produce = { item = 'x3 Infantry Token' },
+        },
+        {
+            repeatable = true,
+            requireFaceUp = true,
+            consume = { count = 3, item = 'x1 Commodities/Tradegoods' },
+            produce = { item = 'x3 Commodities/Tradegoods' },
+        },
+        {
+            repeatable = true,
+            requireFaceDown = true,
+            consume = { count = 3, item = 'x1 Commodities/Tradegoods' },
+            produce = { item = 'x3 Commodities/Tradegoods' },
+        },
+        {
+            consume = { item = 'x3 Fighter Token' },
+            produce = { count = 3, item = 'x1 Fighter Token' },
+        },
+        {
+            consume = { item = 'x3 Infantry Token' },
+            produce = { count = 3, item = 'x1 Infantry Token' },
+        },
+        {
+            requireFaceUp = true,
+            consume = { item = 'x3 Commodities/Tradegoods' },
+            produce = { count = 3, item = 'x1 Commodities/Tradegoods' },
+        },
+        {
+            requireFaceDown = true,
+            consume = { item = 'x3 Commodities/Tradegoods' },
+            produce = { count = 3, item = 'x1 Commodities/Tradegoods' },
+        },
+        {
+            consume = { item = 'x1 Fighter Token' },
+            produce = { item = '!COLOR Fighter' },
+        },
+        {
+            consume = { item = 'x1 Infantry Token' },
+            produce = { item = '!COLOR Infantry' },
+        },
+        {
+            consume = { item = '!COLOR Fighter' },
+            produce = { item = 'x1 Fighter Token' },
+        },
+        {
+            consume = { item = '!COLOR Infantry' },
+            produce = { item = 'x1 Infantry Token' },
+        },
+    },
+
+    WAIT_FRAMES = 3,
+
+    _playerColorToNamesAndGuids = {},
+    _playerColorToWaitId = {},
+}
+
+--- Add an object to the player's pending set, schedule swap.
+function SwapSplitJoin.add(object, playerColor)
+    assert(type(object) == 'userdata' and type(playerColor) == 'string')
+
+    -- Reject bags and decks (unit bags in particular).
+    if object.tag == 'Bag' or object.tag == 'Deck' then
+        return false
+    end
+
+    -- Get the anonymized object name, reject if none.
+    local name = object.getName()
+    name = string.gsub(name, playerColor, '!COLOR')
+    if not SwapSplitJoin.OBJECTNAME_TO_BAGNAME[name] then
+        return false
+    end
+
+    -- Add to the per-color list.  Reject if already there.
+    local namesAndGuids = SwapSplitJoin._playerColorToNamesAndGuids[playerColor]
+    if not namesAndGuids then
+        namesAndGuids = {}
+        SwapSplitJoin._playerColorToNamesAndGuids[playerColor] = namesAndGuids
+    end
+    local guid = object.getGUID()
+    for _, nameAndGuid in ipairs(namesAndGuids) do
+        if guid == nameAndGuid.guid then
+            return false
+        end
+    end
+    table.insert(namesAndGuids, {
+        name = name,
+        guid = guid
+    })
+
+    -- Wait a beat for other objects to get added to the set.
+    local waitId = SwapSplitJoin._playerColorToWaitId[playerColor]
+    if waitId then
+        Wait.stop(waitId)
+        waitId = nil
+    end
+    waitId = Wait.frames(function() SwapSplitJoin._consume(playerColor) end, SwapSplitJoin.WAIT_FRAMES)
+    SwapSplitJoin._playerColorToWaitId[playerColor] = waitId
+    return true
+end
+
+-- Get consumable items from entries (does not remove them from entries).
+-- @param rule: REPLACE_RULES value.
+-- @param namesAndGuids: list of {name, guid} tables.
+-- @return consumable: list of {name, guid} tables for consumable items.
+function SwapSplitJoin._getConsumable(rule, namesAndGuids)
+    assert(type(rule) == 'table' and rule.consume and type(namesAndGuids) == 'table')
+
+    -- Collect objects following rule.
+    local consumable = {}
+    local function maybeAdd(rule, consumeName, nameAndGuid)
+        assert(type(rule) == 'table' and type(consumeName) == 'string' and type(nameAndGuid) == 'table')
+        local object = getObjectFromGUID(nameAndGuid.guid)
+        if not object then
+            return false
+        elseif consumeName ~= nameAndGuid.name then
+            return false
+        elseif rule.requireFaceUp and object.is_face_down then
+            return false
+        elseif rule.requireFaceDown and not object.is_face_down then
+            return false
+        end
+        table.insert(consumable, nameAndGuid)
+    end
+
+    -- For multi-item rules add in item list order (prefer token to plastic when grouping).
+    for _, consumeName in ipairs(rule.consume.items or { rule.consume.item }) do
+        for _, nameAndGuid in ipairs(namesAndGuids) do
+            maybeAdd(rule, consumeName, nameAndGuid)
+        end
+    end
+    return consumable
+end
+
+-- Apply swap/split/join rule ONCE, remove items from namesAndGuids list.
+-- @param rule: REPLACE_RULES value.
+-- @param namesAndGuids: list of {name, guid} tables, modified to remove consumed items.
+-- @param playerColor: color string.
+-- @return boolean: true if a swap/split/join happened.
+function SwapSplitJoin._applyRule(rule, namesAndGuids, playerColor)
+    assert(type(rule) == 'table' and rule.consume and type(namesAndGuids) == 'table' and type(playerColor) == 'string')
+
+    -- Get consumable items, fail if not enough.
+    local consumable = SwapSplitJoin._getConsumable(rule, namesAndGuids)
+    if #consumable < (rule.consume.count or 1) then
+        return false
+    end
+
+    -- Fail if produce bag does not have sufficient quantity.
+    local produceBagName = assert(SwapSplitJoin.OBJECTNAME_TO_BAGNAME[rule.produce.item])
+    produceBagName = string.gsub(produceBagName, '!COLOR', playerColor)
+    local produceBag = assert(_getBag(produceBagName))
+    if produceBag.tag == 'Bag' and produceBag.getQuantity() < (rule.produce.count or 1) then
+        return false
+    end
+
+    -- Consume the proper number of items.
+    local pos = false
+    for _ = 1, (rule.consume.count or 1) do
+        local nameAndGuid = assert(table.remove(consumable, 1))
+        -- Remove from candidate items.
+        for i, candidate in ipairs(namesAndGuids) do
+            if candidate.guid == nameAndGuid.guid then
+                table.remove(namesAndGuids, i)
+            end
+        end
+        -- Consume object.
+        local object = assert(getObjectFromGUID(nameAndGuid.guid))
+        local bagName = assert(SwapSplitJoin.OBJECTNAME_TO_BAGNAME[nameAndGuid.name])
+        bagName = string.gsub(bagName, '!COLOR', playerColor)
+        local bag = assert(_getBag(bagName))
+        if not pos then
+            pos = object.getPosition()
+        end
+        bag.putObject(object)
+    end
+
+    -- Produce.
+    local name = assert(rule.produce.item)
+    local bagName = assert(SwapSplitJoin.OBJECTNAME_TO_BAGNAME[name])
+    for _ = 1, (rule.produce.count or 1) do
+        local rot = { x = 0, y = 0, z = (rule.requireFaceDown and 180 or 0) }
+        assert(produceBag.takeObject({
+            position = pos,
+            rotation = rot,
+            smooth = true,
+        }))
+        pos.z = pos.z + 0.5 * (pos.z > 0 and 1 or -1)
+        pos.y = pos.y + 0.5
+    end
+
+    return true
+end
+
+function SwapSplitJoin._consume(playerColor)
+    assert(type(playerColor) == 'string')
+
+    -- Get selected items.
+    local namesAndGuids = SwapSplitJoin._playerColorToNamesAndGuids[playerColor]
+    if not namesAndGuids then
+        return false
+    end
+    SwapSplitJoin._playerColorToNamesAndGuids[playerColor] = nil
+
+    -- Apply rules in order.  Once any rule is applied only repeatable rules can chain.
+    local didConsume = false
+    for _, rule in ipairs(SwapSplitJoin.REPLACE_RULES) do
+        if rule.repeatable then
+            -- Do all repeatable rules as many times as possible.
+            while SwapSplitJoin._applyRule(rule, namesAndGuids, playerColor) do
+                didConsume = true
+            end
+        elseif not didConsume then
+            -- If singleton and nothing consumed yet, consume ONLY FIRST APPLICABLE.
+            didConsume = SwapSplitJoin._applyRule(rule, namesAndGuids, playerColor)
+        end
+    end
+end
+
+-- Get absolute bag name from !COLOR-allowed item name.
+local _bagGuidCache = {}
+function _getBag(bagName)
+   assert(type(bagName) == 'string')
+   local bagGuid = _bagGuidCache[bagName]
+   local bag = bagGuid and getObjectFromGUID(bagGuid)
+   if not bag then
+       for _, object in ipairs(getAllObjects()) do
+           if (object.tag == 'Bag' or object.tag == 'Infinite') and object.getName() == bagName then
+               _bagGuidCache[bagName] = object.getGUID()
+               bag = object
+               break
+           end
+       end
+   end
+   if not bag then
+       error('Global._getBag: missing bag "' .. bagName .. '"')
+   end
+   return bag
+end
+
+local originalOnObjectRandomize = onObjectRandomize
+function onObjectRandomize(object, playerColor)
+    assert(type(object) == 'userdata' and type(playerColor) == 'string')
+
+    if originalOnObjectRandomize then
+        originalOnObjectRandomize(object, playerColor)
+    end
+
+    SwapSplitJoin.add(object, playerColor)
+end
+
+-------------------------------------------------------------------------------
+
+local KEY_INDEX_TO_TOKEN_BAG = {
+    [1] = 'x1 Commodities/Tradegoods Bag',
+    [2] = 'x1 Fighter Tokens Bag',
+    [3] = 'x1 Infantry Tokens Bag',
+}
+
+local _graveyardGuid = false
+function _getGraveyard()
+    local bag = _graveyardGuid and getObjectFromGUID(_graveyardGuid)
+    if not bag then
+        for _, object in ipairs(getAllObjects()) do
+            if object.tag == 'Bag' and string.match(object.getName(), '^TI4 Graveyard') then
+                _graveyardGuid = object.getGUID()
+                bag = object
+                break
+            end
+        end
+    end
+    return bag
+end
+
+function onScriptingButtonUp(index, playerColor)
+    assert(type(index) == 'number' and type(playerColor) == 'string')
+
+    -- Spectators cannot use these.  If there are multiple spectators
+    -- do not know which pressed the key; not safe to move camera.
+    if playerColor == 'Grey' then
+        return
+    end
+
+    local tokenBagName = KEY_INDEX_TO_TOKEN_BAG[index]
+    if tokenBagName then
+        local pointerPosition = Player[playerColor].getPointerPosition()
+        local bag = assert(_getBag(tokenBagName))
+        bag.takeObject({
+            position = pointerPosition,
+            smooth = true
+        })
+    end
+
+    -- 4=roller, 5=active system, 6=map, 7=scoreboard, 8=votes, 9=player zone.
+    local function _getByName(name)
+        for i, obj in ipairs(getAllObjects()) do
+            if obj.getName() == name then
+                return obj
+            end
+        end
+    end
+    local function _closestRoller(p0)
+        local best = false
+        local bestDsq = false
+        for _, object in ipairs(getAllObjects()) do
+            if string.match(object.getName(), '^TI4 MultiRoller') then
+                local p1 = object.getPosition()
+                local dSq = (p0.x - p1.x)^2 + (p0.z - p1.z)^2
+                if (not bestDsq) or (dSq < bestDsq) then
+                    best = object
+                    bestDsq = dSq
+                end
+            end
+        end
+        return best
+    end
+    if index == 4 then
+        -- Roller
+        local zoneAttr = _zoneHelper.zoneAttributes(playerColor)
+        local roller = zoneAttr and _closestRoller(zoneAttr.center)
+        if zoneAttr and roller then
+            Player[playerColor].lookAt({
+                position = roller.getPosition(),
+                pitch    = 75,
+                yaw      = zoneAttr.rotation.y + 180,
+                distance = 20,
+            })
+        end
+    elseif index == 5 then
+        -- Active system
+        local zoneAttr = _zoneHelper.zoneAttributes(playerColor)
+        local system = _systemHelper.getLastActivatedSystem()
+        local systemObject = system and getObjectFromGUID(system.guid)
+        if zoneAttr and systemObject then
+            Player[playerColor].lookAt({
+                position = systemObject.getPosition(),
+                pitch    = 60,
+                yaw      = zoneAttr.rotation.y + 180,
+                distance = 10,
+            })
+        elseif not systemObject then
+            printToColor('No active system', playerColor)
+        end
+    elseif index == 6 then
+        -- Map
+        local zoneAttr = _zoneHelper.zoneAttributes(playerColor)
+        local extraRings = _zoneHelper.getExtraRings()
+        if zoneAttr then
+            Player[playerColor].lookAt({
+              position = {0,0,0},
+              pitch    = 75,
+              yaw      = zoneAttr.rotation.y + 180,
+              distance = 45 + (extraRings or 0) * 12,
+            })
+        end
+    elseif index == 7 then
+        -- Scoreboard
+        local scoreBoardObj = _getByName('Scoreboard')
+        local secretsMatObj = _getByName('Secrets Mat')
+        if scoreBoardObj and secretsMatObj then
+            local p0 = scoreBoardObj.getPosition()
+            local p1 = secretsMatObj.getPosition()
+            local p = { x = (p0.x + p1.x) / 2, y = (p0.y + p1.y) / 2, z = (p0.z + p1.z) / 2, }
+            Player[playerColor].lookAt({
+              position = p,
+              pitch    = 90,
+              yaw      = scoreBoardObj.getRotation().y + 180,
+              distance = 30,
+            })
+        end
+    elseif index == 8 then
+        -- Votes
+        local voteCounter = _getByName(playerColor .. ' Player Votes')
+        if voteCounter then
+          Player[playerColor].lookAt({
+              position = voteCounter.getPosition(),
+              pitch    = 60,
+              yaw      = voteCounter.getRotation().y,
+              distance = 30,
+            })
+        end
+    elseif index == 9 then
+        -- Player zone
+        local zoneAttr = _zoneHelper.zoneAttributes(playerColor)
+        if zoneAttr then
+            Player[playerColor].lookAt({
+              position = zoneAttr.center,
+              pitch    = 60,
+              yaw      = zoneAttr.rotation.y+180,
+              distance = 45,
+            })
+        end
+    end
+
+    -- Index 10 is '0'.  Throw any held object(s) into the graveyard.
+    -- Could use getHoverObject but this feels like it requires more intention.
+    if index == 10 then
+        local holding = Player[playerColor].getHoldingObjects()
+        local graveyard = _getGraveyard()
+        if holding and #holding > 0 and graveyard then
+            printToAll(playerColor .. ' quick trashing ' .. (#holding) .. ' items.', playerColor)
+            for _, object in ipairs(holding) do
+                graveyard.putObject(object)
+            end
+        end
+    end
+end
+
+-------------------------------------------------------------------------------
+
+
+--- Shuffle decks when the game first starts.
+-- @author Darrell
+local originalOnLoad = onLoad
+function onLoad(saveState)
+    if originalOnLoad then
+        originalOnLoad(saveState)
+    end
+
+    local shuffleSet = {
+        ['Public Objectives I'] = 'Deck',
+        ['Public Objectives II'] = 'Deck',
+        ['Secret Objectives'] = 'Deck',
+        ['Agenda'] = 'Deck',
+        ['Actions'] = 'Deck',
+        ['Pick a Faction to Play'] = 'Bag',
+        ['Blue Planet Tiles'] = 'Bag',
+        ['Red Anomaly Tiles'] = 'Bag',
+        ['Randomize Seats'] = 'Bag',
+        ['Cultural Exploration'] = 'Deck',
+        ['Industrial Exploration'] = 'Deck',
+        ['Hazardous Exploration'] = 'Deck',
+        ['Frontier Exploration'] = 'Deck',
+        ['Relics'] = 'Deck',
+    }
+    local toShuffle = {}
+    for _, object in ipairs(getAllObjects()) do
+        local name = object.getName()
+        local tag = object.tag
+        if tag == 'Bag' and string.match(name, ' Command Tokens Bag$') then
+            return  -- loaded a game in progress, abort!
+        end
+        local expectTag = shuffleSet[name]
+        if expectTag and tag == expectTag then
+            table.insert(toShuffle, object)
+        end
+    end
+    local shuffled = {}
+    for _, object in ipairs(toShuffle) do
+        object.shuffle()
+        table.insert(shuffled, object.getName())
+    end
+    if #shuffled > 0 then
+        printToAll('Shuffled: ' .. table.concat(table.sort(shuffled), ', ') .. '.')
+    end
+
+    addContextMenuItem('Toggle Actions Help', function(playerColor) toggleSummary(Player[playerColor], 'actionSummaryLayout') end)
+end
+
+-------------------------------------------------------------------------------
+
+function genericFollow(player, option, id)
+    broadcastToAll(player.steam_name .. " uses " .. option .. ".", player.color)
+    sendOnStrategyCardButtonClicked(player.color, option, id)
+end
+
+function notFollow(player, option, id)
+    broadcastToAll(player.steam_name .. " does not use " .. option .. ".", player.color)
+    sendOnStrategyCardButtonClicked(player.color, option, id)
+end
+
+function genericSilent(player, option, id)
+    sendOnStrategyCardButtonClicked(player.color, option, id)
+end
+
+function closeMenu(player, menu, id)
+    local vis = UI.getAttribute(menu, "visibility")
+    if vis == nil or vis == "" then
+        local seatedPlayers = getSeatedPlayers()
+        for p, player in pairs(seatedPlayers) do
+            if vis == nil or vis == "" then
+                vis = player
+            else
+                vis = vis .. "|" .. player
+            end
+        end
+    end
+    local i, j = string.find(vis, player.color)
+    local l = string.len(vis)
+    if i ~= nil and j ~= nil then
+        if i == 1 then
+            if j == l then
+                newVis = ""
+            else
+                newVis = string.sub(vis,j+2,l)
+            end
+        else
+            if j == l then
+                newVis = string.sub(vis,1,i-2)
+            else
+                newVis = string.sub(vis,1,i-1) .. string.sub(vis,j+2,l)
+            end
+        end
+    end
+    if newVis == "" then
+        UI.setAttribute(menu, "active", false)
+        broadcastToAll("All players have responded", "Black")
+    end
+    UI.setAttribute(menu, "visibility", newVis)
+    sendOnStrategyCardButtonClicked(player.color, menu, id)
+end
+
+function leadershipSelected(player, option, id)
+    broadcastToAll(player.steam_name .. " uses Leadership to gain " .. option .. " command tokens.", player.color)
+    sendOnStrategyCardButtonClicked(player.color, option, id)
+end
+function politicsPrimary(player, option, id)
+    broadcastToAll(player.steam_name .. " places " .. option .. " of the agenda deck.", player.color)
+    sendOnStrategyCardButtonClicked(player.color, option, id)
+end
+
+function constructionPrimary(player, option, id)
+    broadcastToAll(player.steam_name .. " uses Construction Primary to " .. option .. ".", player.color)
+    sendOnStrategyCardButtonClicked(player.color, option, id)
+end
+
+function constructionSecondary(player, option, id)
+    broadcastToAll(player.steam_name .. " uses Construction Secondary to place " .. option .. ".", player.color)
+    sendOnStrategyCardButtonClicked(player.color, option, id)
+end
+
+function tradeSelected(player, option, id)
+    broadcastToAll(player.steam_name .. " uses Trade to refresh " .. option .. "'s commodities.", option)
+    sendOnStrategyCardButtonClicked(player.color, option, id)
+end
+
+function pickTech(player, option, id)
+    broadcastToAll(player.steam_name .. " researches " .. option .. ".", player.color)
+    sendOnStrategyCardButtonClicked(player.color, option, id)
+end
+
+function luxSelected(player, option, id)
+    broadcastToAll(player.steam_name .. " uses Lux to gain " .. option .. " command tokens.", player.color)
+    sendOnStrategyCardButtonClicked(player.color, option, id)
+end
+
+
+function civitasPrimary(player, option, id)
+    broadcastToAll(player.steam_name .. " uses Civitas Primary to " .. option .. ".", player.color)
+    sendOnStrategyCardButtonClicked(player.color, option, id)
+end
+
+function civitasSecondary(player, option, id)
+    broadcastToAll(player.steam_name .. " uses Civitas Secondary to place " .. option .. ".", player.color)
+    sendOnStrategyCardButtonClicked(player.color, option, id)
+end
+
+function amicusSelected(player, option, id)
+    broadcastToAll(player.steam_name .. " uses Trade to refresh " .. option .. "'s commodities.", option)
+    sendOnStrategyCardButtonClicked(player.color, option, id)
+end
+
+function calamitasSecondary(player, option, id)
+    broadcastToAll(player.steam_name .. " uses Calamitas Secondary to " .. option .. ".", player.color)
+    sendOnStrategyCardButtonClicked(player.color, option, id)
+end
+
+function aeternaSecondary(player, option, id)
+    broadcastToAll(player.steam_name .. " uses Calamitas Secondary for " .. option .. ".", player.color)
+    sendOnStrategyCardButtonClicked(player.color, option, id)
+end
+
+function sendOnStrategyCardButtonClicked(player, value, strategyCard)
+    local handler = 'onStrategyCardButtonClicked'
+    local listeners = {}
+    for _, object in ipairs(getAllObjects()) do
+        if object.getVar(handler) then
+            table.insert(listeners, object.getGUID())
+        end
+    end
+    if #listeners > 0 then
+        local params = {
+            player = player,
+            strategyCard = strategyCard,
+            value = value
+        }
+        for i, guid in ipairs(listeners) do
+            local function callHandler()
+                local listener = getObjectFromGUID(guid)
+                if listener then
+                    listener.call(handler, params)
+                end
+            end
+            Wait.frames(callHandler, i)
+        end
+    end
+end
+
+function toggleSummary(player, summaryId)
+    -- Get visibility as a set.
+    local vis = UI.getAttribute(summaryId, 'visibility') or ''
+    local visSet = {}
+    for color in string.gmatch(vis, '[^|]+') do
+        visSet[color] = true
+    end
+
+    -- Toggle visibility.
+    if visSet[player.color] then
+        visSet[player.color] = nil
+    else
+        visSet[player.color] = true
+    end
+
+    -- Recreate visibility string.
+    local visList = {}
+    for color, _ in pairs(visSet) do
+        table.insert(visList, color)
+    end
+    vis = table.concat(visList, '|')
+    local active = #visList > 0
+
+    -- Apply.
+    UI.setAttribute(summaryId, 'visibility', vis)
+    UI.setAttribute(summaryId, 'active', active)
+end
+
+-------------------------------------------------------------------------------
+
+-- Exclusive bags are bags where all entries share the bag name, such as units.
+-- Use 'filter' to prevent other objects from entering those bags.
+-- @author Darrell
+local exclusiveBagSet = {}
+
+local originalFilterObjectEnterContainer = filterObjectEnterContainer
+function filterObjectEnterContainer(container, enterObject)
+    local result = true
+
+    if originalFilterObjectEnterContainer then
+        result = result and originalFilterObjectEnterContainer(container, enterObject)
+    end
+
+    local bagName = container.getName()
+    local entryName = enterObject.getName()
+    local exclusiveBag = string.len(bagName) > 0 and exclusiveBagSet[bagName]
+    result = result and (not exclusiveBag or bagName == entryName)
+
+    -- Also reject wrong items into the command tokens bags.
+    if string.find(bagName, 'Command Tokens Bag') then
+        entryName = string.gsub(entryName, '-', '%%-')
+        result = result and string.find(bagName, entryName)
+    end
+
+    return result
+end
+
+-- Also reorient units upright when leaving a unit bag.
+local originalOnObjectLeaveContainer = onObjectLeaveContainer
+function onObjectLeaveContainer(container, leaveObject)
+    if originalOnObjectLeaveContainer then
+        originalOnObjectLeaveContainer(container, leaveObject)
+    end
+    local name = leaveObject.getName()
+    if string.len(name) > 0 and exclusiveBagSet[name] then
+        leaveObject.setRotation(container.getRotation())
+    end
+end
+
+local UNIT_NAMES = {
+    'Mech',
+    'Infantry',
+    'Fighter',
+    'Space Dock',
+    'PDS',
+    'Carrier',
+    'Destroyer',
+    'Cruiser',
+    'Dreadnought',
+    'War Sun',
+    'Flagship',
+}
+
+local originalOnLoad = onLoad
+function onLoad(saveState)
+    if originalOnLoad then
+        originalOnLoad(saveState)
+    end
+    exclusiveBagSet = {}
+    for _, color in ipairs(Player.getColors()) do
+        for _, unitName in ipairs(UNIT_NAMES) do
+            exclusiveBagSet[color .. ' ' .. unitName] = true
+        end
+    end
+    for _, faction in pairs(_factionHelper.allFactions(true)) do
+        if faction.flagship then
+            exclusiveBagSet[faction.flagship] = true
+        end
+    end
+end
+
+-------------------------------------------------------------------------------
+
+-- Report when taking or putting command tokens.
+-- @author Darrell
+local ChattyCommandTokens = {
+    _playerColorToState = {},
+}
+
+function ChattyCommandTokens._process(container, object, transactionType)
+    assert(type(container) == 'userdata' and type(object) == 'userdata' and type(transactionType) == 'string')
+    local isCommandTokenBag = string.match(container.getName(), 'Command Tokens Bag$')
+    if isCommandTokenBag then
+        local tokenName = string.match(object.getName(), '^(.*) Command Token$')
+        local faction = tokenName and _factionHelper.fromTokenName(tokenName)
+        local color = faction and faction.color
+        if color then
+            local state = ChattyCommandTokens._playerColorToState[color]
+            if not state then
+                state = {
+                    name = tokenName,
+                    transactions = {},
+                    waitId = false,
+                }
+                ChattyCommandTokens._playerColorToState[color] = state
+            end
+            state.transactions[transactionType] = (state.transactions[transactionType] or 0) + 1
+            if state.waitId then
+                Wait.stop(state.waitId)
+            end
+            state.waitId = Wait.time(function() ChattyCommandTokens._report(color) end, 5)
+        end
+    end
+end
+
+function ChattyCommandTokens._report(color)
+    assert(type(color) == 'string')
+    local state = ChattyCommandTokens._playerColorToState[color]
+    ChattyCommandTokens._playerColorToState[color] = nil
+    if state then
+        local tranactionMessages = {}
+        local total = 0
+        for transactionType, quantity in pairs(state.transactions) do
+            table.insert(tranactionMessages, transactionType .. ' ' .. quantity)
+            total = total + quantity
+        end
+        if total > 0 then
+            local message = {
+                state.name,
+                table.concat(tranactionMessages, ', '),
+                'Command Token' .. (total > 1 and 's' or '')
+            }
+            message = table.concat(message, ' ')
+            printToAll(message, color)
+        end
+    end
+end
+
+local originalOnObjectLeaveContainer = onObjectLeaveContainer
+function onObjectLeaveContainer(container, leaveObject)
+    if originalOnObjectLeaveContainer then
+        originalOnObjectLeaveContainer(container, leaveObject)
+    end
+    ChattyCommandTokens._process(container, leaveObject, 'withdrew')
+end
+
+local originalOnObjectEnterContainer = onObjectEnterContainer
+function onObjectEnterContainer(container, enterObject)
+    if originalOnObjectEnterContainer then
+        originalOnObjectEnterContainer(container, enterObject)
+    end
+    ChattyCommandTokens._process(container, enterObject, 'deposited')
+end
+
+-------------------------------------------------------------------------------
+
+local function _help(clickerColor)
+    printToColor(table.concat({
+        '!help supported messages:',
+        '  !COLOR : announces whisper to COLOR (use "red", etc, for COLOR).',
+        '  !tealme : change to the teal seat (interact, see !COLOR whispers).',
+        '  !colorme : change to an avaiable color (interact with the table).',
+        '  !seats : swap seated players into random seats (only works before faction unpack).',
+        'numpad keys:',
+        '  1,2,3 : place tradegood, fighter, infantry token.',
+        '  4 : view combat roller.',
+        '  5 : view active system.',
+        '  6 : view galaxy map.',
+        '  7 : view score area.',
+        '  8 : view agenda phase area.',
+        '  9 : view player zone.',
+        '  0 : throw any HELD objects into the graveyard bag.',
+    }, '\n'), clickerColor, 'Yellow')
+end
+
+local function _randomizeSeats(clickerColor)
+    broadcastToAll(clickerColor .. ' used !seats to swap SEATED players into random seats.', 'Yellow')
+    if clickerColor == 'Grey' then
+        broadcastToAll('Spectators cannot swap seats', 'Yellow')
+        return
+    end
+    for color, faction in pairs(_factionHelper.allFactions()) do
+        broadcastToAll('Cannot swap seats after unpacking any factions', 'Yellow')
+        return
+    end
+
+    local zoneColorSet = {}
+    for _, zoneColor in ipairs(_zoneHelper.zones()) do
+        zoneColorSet[zoneColor] = true
+    end
+
+    local players = {}
+    local colors = {}
+    for _, player in ipairs(Player.getPlayers()) do
+        if zoneColorSet[player.color] then
+            table.insert(players, player)
+            table.insert(colors, player.color)
+            player.changeColor('Grey')
+        end
+    end
+    math.randomseed(os.time())
+    for _, player in ipairs(players) do
+        player.changeColor(table.remove(colors, math.random(#colors)))
+    end
+end
+
+--- Use "!color message" to send an announced whisper.  Prints a message to
+-- everyone else that the whisper happened, then sends whisper to the target.
+-- Note that normal "/color message" whispers still work as before.
+-- @author Darrell
+local orginalOnChat = onChat
+function onChat(message, srcPlayer)
+    if orginalOnChat and not orginalOnChat(message, srcPlayer) then
+        return false -- originial suppressed message
+    end
+
+    -- The teal color can see !whisper messages (for streamers).
+    if string.lower(message) == '!tealme' then
+        if srcPlayer.admin or srcPlayer.promoted then
+            srcPlayer.changeColor('Teal')
+        else
+            printToAll('!tealme failed for ' .. srcPlayer.color .. ', must be promoted to use', 'Yellow')
+        end
+        return false
+    end
+
+    -- Take a non-table color (for streamers to interact with table).
+    if string.lower(message) == '!colorme' then
+        if srcPlayer.admin or srcPlayer.promoted then
+            local function getAvailableColor()
+                local takenSet = {
+                    Grey = true,
+                    Black = true,
+                    Teal = true
+                }
+                for _, color in ipairs(_zoneHelper.zones()) do
+                    takenSet[color] = true
+                end
+                for _, player in ipairs(Player.getPlayers()) do
+                    takenSet[player.color] = true
+                end
+                local availableSet = {}
+                local availableList = {}
+                for _, color in ipairs(Player.getColors()) do
+                    if not takenSet[color] then
+                        availableSet[color] = true
+                        table.insert(availableList, color)
+                    end
+                end
+                if availableSet['Orange'] then
+                    return 'Orange' -- use consisitent preferred color
+                end
+                if availableSet['Pink'] then
+                    return 'Pink'
+                end
+                if #availableList > 0 then
+                    return availableList[1]
+                end
+            end
+            local color = getAvailableColor()
+            if srcPlayer.color ~= 'Grey' then
+                printToAll('!colorme failed for ' .. srcPlayer.color .. ', must be spectator (grey)', 'Yellow')
+            elseif not color then
+                printToAll('!colorme failed for ' .. srcPlayer.color .. ', no open colors', 'Yellow')
+            else
+                srcPlayer.changeColor(color)
+            end
+        else
+            printToAll('!colorme failed for ' .. srcPlayer.color .. ', must be promoted to use', 'Yellow')
+        end
+        return false
+    end
+
+    if string.lower(message) == '!seats' then
+        if srcPlayer.admin or srcPlayer.promoted then
+            _randomizeSeats(srcPlayer.color)
+        else
+            printToAll('!seats failed for ' .. srcPlayer.color .. ', must be promoted to use', 'Yellow')
+        end
+        return false
+    end
+
+    if string.lower(message) == '!help' then
+        _help(srcPlayer.color)
+        return false
+    end
+
+    -- '!gamedata' or '!gamedata <key:string> <delay:number>'
+    if string.match(string.lower(message), '!gamedata') then
+        if srcPlayer.admin or srcPlayer.promoted then
+            local parts = {}
+            for part in string.gmatch(message, '%S+') do
+                table.insert(parts, part)
+            end
+            if #parts > 1 then
+                local delay = _gameDataHelper.startPeriodicUpdates({
+                    key = parts[2],
+                    delay = parts[3] and tonumber(parts[3])
+                })
+                printToAll('!gamedata enabled by ' .. srcPlayer.color .. ' delay ' .. delay, 'Yellow')
+            else
+                _gameDataHelper.stopPeriodicUpdates()
+                printToAll('!gamedata disabled by ' .. srcPlayer.color, 'Yellow')
+            end
+        else
+            printToAll('!gamedata failed for ' .. srcPlayer.color .. ', must be promoted to use', 'Yellow')
+        end
+        return false
+    end
+
+    if string.match(string.lower(message), '!timestamp') then
+        local timestamp = _gameDataHelper.getGameDataTimestamp()
+        timestamp = timestamp or '<awaiting setup>'
+        printToColor('!timestamp: ' .. timestamp, srcPlayer.color, 'Yellow')
+        return false
+    end
+
+    local colorSet = {}
+    for _, color in ipairs(getSeatedPlayers()) do
+        colorSet[color] = true
+    end
+
+    -- The real function throws an error on invalid input.
+    local function safeColorToHex(color)
+        if colorSet[color] then
+            return Color.toHex(Color.fromString(color))
+        end
+        return 'ffffff'
+    end
+
+    local srcColor = srcPlayer.color
+    local srcName = srcPlayer.steam_name
+    local srcHex = safeColorToHex(srcColor)
+    local msgHex = 'ffffff'
+    local dstColor, message = string.match(message, '^!(%a+) (.+)')
+
+    if dstColor then
+        dstColor = dstColor:sub(1,1):upper()..dstColor:sub(2):lower()
+        local dstHex = safeColorToHex(dstColor)
+
+        local publicMessage = table.concat({
+            '[' .. msgHex .. ']!Whisper: ',
+            '[' .. srcHex .. ']' .. srcColor,
+            ' ',
+            '[' .. msgHex .. ']->',
+            ' ',
+            '[' .. dstHex .. ']' .. dstColor,
+        }, '')
+
+        local privateMessage = table.concat({
+            '[' .. dstHex .. ']<' .. dstColor .. '>',
+            ' ',
+            '[' .. srcHex .. ']' .. srcName .. ':',
+            ' ',
+            '[' .. msgHex .. ']' .. message
+        }, '')
+
+        if not colorSet[dstColor] then
+            printToColor('No one is playing as ' .. dstColor, srcColor, srcColor)
+        else
+            printToAll(publicMessage)
+            printToColor(privateMessage, srcColor, srcColor)
+            if dstColor ~= srcColor then
+                printToColor(privateMessage, dstColor, srcColor)
+            end
+            if colorSet['Teal'] and srcColor ~= 'Teal' and dstColor ~= 'Teal' then
+                printToColor(privateMessage, 'Teal', srcColor)
+            end
+            doChatNotification(srcColor, dstColor)
+        end
+        return false
+    end
+    return true
+end
+
+--- Flash the screen when a player gets a !whisper.
+-- @author Darrell
+local _chatNotificationQueue = {}
+function doChatNotification(srcColor, dstColor)
+    assert(type(srcColor) == 'string' and type(dstColor) == 'string')
+
+    -- Removed exisiting EOF.
+    local queueWasEmpty = (#_chatNotificationQueue) == 0
+    if not queueWasEmpty then
+        local entry = table.remove(_chatNotificationQueue)
+        assert(entry.eof, 'not eof')
+    end
+
+    -- Queue new actions (shared element, do one color at a time).
+    table.insert(_chatNotificationQueue, {
+        srcColor = srcColor,
+        dstColor = dstColor,
+        show = true
+    })
+    table.insert(_chatNotificationQueue, {
+        hide = true
+    })
+    table.insert(_chatNotificationQueue, {
+        srcColor = srcColor,
+        dstColor = dstColor,
+        show = true
+    })
+    table.insert(_chatNotificationQueue, {
+        hide = true
+    })
+    table.insert(_chatNotificationQueue, {
+        eof = true -- hide finished when this comes up
+    })
+
+    local function serviceChatNotificationQueue()
+        local entry = table.remove(_chatNotificationQueue, 1)
+        if entry and entry.show then
+            UI.setAttribute('flashBorderLeft', 'color', srcColor)
+            UI.setAttribute('flashBorderRight', 'color', srcColor)
+            UI.setAttribute('flashBorder', 'active', true)
+            UI.show('flashBorder')
+            UI.setAttribute('flashBorder', 'visibility', dstColor) -- MUST be after active/show
+        elseif entry and entry.hide then
+            UI.hide('flashBorder')
+        elseif (not entry) or entry.eof then
+            UI.setAttribute('flashBorder', 'active', false)
+        end
+        if (#_chatNotificationQueue) > 0 then
+            local delay = UI.getAttribute('flashBorder', 'animationDuration') or 0.1
+            Wait.time(serviceChatNotificationQueue, tonumber(delay) * 1.5)
+        end
+    end
+    if queueWasEmpty then
+        serviceChatNotificationQueue()
+    end
+end
+
+--- Route draw X cards to deck helper for dealing.
+function onObjectNumberTyped(object, playerColor, number)
+    assert(type(object) == 'userdata' and type(playerColor) == 'string' and type(number) == 'number')
+    -- Only intercept when over a deck, not if it is the last card.  Why? The
+    -- card might be face down on the table as part of a player transaction,
+    -- do not attempt to differentiate that from being in the deck locaiton.
+    if object.tag == 'Deck' and _deckHelper.getDeck(object.getName()) == object.getGUID() then
+        _deckHelper.deal({
+            deck = object.getName(),
+            color = playerColor,
+            count = number
+        })
+        return true  -- stop TTS from dealing the card(s)
+    end
+end
+
+-------------------------------------------------------------------------------
+
+local _deletedItemsBagGuid = false
+function onObjectStateChange(changedObject, oldGuid)
+    local deletedItemsBag = _deletedItemsBagGuid and getObjectFromGUID(_deletedItemsBagGuid)
+    if not deletedItemsBag then
+        for _, object in ipairs(getAllObjects()) do
+            if object.tag == 'Bag' and object.getName() == 'TI4 Deleted Items' then
+                _deletedItemsBagGuid = object.getGUID()
+                deletedItemsBag = object
+                break
+            end
+        end
+    end
+    if deletedItemsBag then
+        deletedItemsBag.call('ignoreGuid', oldGuid)
+    end
+end
+
+-------------------------------------------------------------------------------
+-- Index is only called when the key does not already exist.
+-- local _lockGlobalsMetaTable = {}
+-- function _lockGlobalsMetaTable.__index(table, key)
+--     error('Accessing missing global "' .. tostring(key or '<nil>') .. '", typo?', 2)
+-- end
+-- function _lockGlobalsMetaTable.__newindex(table, key, value)
+--     error('Globals are locked, cannot create global variable "' .. tostring(key or '<nil>') .. '"', 2)
+-- end
+-- setmetatable(_G, _lockGlobalsMetaTable)

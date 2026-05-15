@@ -1,0 +1,310 @@
+--- Add/remove hyperlanes
+-- @author Darrell
+-- #include <~/TI4-TTS/TI4/Objects/HyperlanesBag>
+
+function getHelperClient(helperObjectName)
+    local function getHelperObject()
+        for _, object in ipairs(getAllObjects()) do
+            if object.getName() == helperObjectName then return object end
+        end
+        error('missing object "' .. helperObjectName .. '"')
+    end
+    local helperObject = false
+    local function getCallWrapper(functionName)
+        helperObject = helperObject or getHelperObject()
+        if not helperObject.getVar(functionName) then error('missing ' .. helperObjectName .. '.' .. functionName) end
+        return function(parameters) return helperObject.call(functionName, parameters) end
+    end
+    return setmetatable({}, { __index = function(t, k) return getCallWrapper(k) end })
+end
+local _systemHelper = getHelperClient('TI4_SYSTEM_HELPER')
+local _zoneHelper = getHelperClient('TI4_ZONE_HELPER')
+
+local function copyTable(t)
+    if t and type(t) == 'table' then
+        local copy = {}
+        for k, v in pairs(t) do
+            copy[k] = type(v) == 'table' and copyTable(v) or v
+        end
+        t = copy
+    end
+    return t
+end
+
+local HYPERLANES = {
+    [2] = {
+        { tile = 1015, position = {-15.75,1.19,9.09}, rotation = {0,0,0} },
+        { tile = 1016, position = {-10.5,1.18,12.12}, rotation = {0,180,0} },
+        { tile = 1012, position = {15.75,1.19,9.09}, rotation = {0,120,0} },
+        { tile = 1018, position = {10.5,1.18,12.12}, rotation = {0,240,0} },
+        { tile = 85, position = {15.75,1.12,-9.1}, rotation = {0,120,0} },
+        { tile = 84, position = {10.5,1.12,-12.13}, rotation = {0,300,0} },
+        { tile = 86, position = {-15.75,1.12,-9.1}, rotation = {0,240,0} },
+        { tile = 83, position = {-10.5,1.12,-12.13}, rotation = {0,240,0} },
+        { tile = 0, seat = 1, position = {0,1.19,-18.19}, rotation = {0,180,0} },
+        { tile = 0, seat = 2, position = {0,1.2,18.19}, rotation = {0,180,0} },
+    },
+    [3] = {
+        { tile = 88, position = {-5.25,1.12,9.09}, rotation = {0,0,0} },
+        { tile = 88, position = {10.5,1.12,0}, rotation = {0,120,0} },
+        { tile = 88, position = {-10.5,1.12,0}, rotation = {0,120,0} },
+        { tile = 87, position = {5.25,1.12,9.09}, rotation = {0,0,0} },
+        { tile = 87, position = {5.25,1.12,-9.1}, rotation = {0,120,0} },
+        { tile = 87, position = {-5.25,1.12,-9.1}, rotation = {0,0,0} },
+        { tile = 85, position = {0,1.12,6.06}, rotation = {0,0,0} },
+        { tile = 85, position = {5.25,1.12,-3.04}, rotation = {0,120,0} },
+        { tile = 85, position = {-5.25,1.12,-3.04}, rotation = {0,240,0} },
+        { tile = 84, position = {5.25,1.12,15.15}, rotation = {0,0,0} },
+        { tile = 84, position = {10.5,1.12,-12.13}, rotation = {0,120,0} },
+        { tile = 84, position = {-10.5,1.12,-12.13}, rotation = {0,0,0} },
+        { tile = 86, position = {0,1.12,18.18}, rotation = {0,0,0} },
+        { tile = 86, position = {15.75,1.12,-9.1}, rotation = {0,120,0} },
+        { tile = 86, position = {-15.75,1.12,-9.1}, rotation = {0,240,0} },
+        { tile = 83, position = {-5.25,1.12,15.15}, rotation = {0,180,0} },
+        { tile = 83, position = {15.75,1.12,-3.04}, rotation = {0,300,0} },
+        { tile = 83, position = {-15.75,1.12,-3.04}, rotation = {0,300,0} },
+        { tile = 0, seat = 1, position = {0,1.19,-18.19}, rotation = {0,180,0} },
+        { tile = 0, seat = 2, position = {-15.75,1.2,9.09}, rotation = {0,180,0} },
+        { tile = 0, seat = 3, position = {15.75,1.2,9.09}, rotation = {0,180,0} },
+    },
+    [4] = {
+        { tile = 88, position = {5.25,1.12,-9.1}, rotation = {0,180,0} },
+        { tile = 87, position = {-5.25,1.12,-9.1}, rotation = {0,180,0} },
+        { tile = 85, position = {0,1.12,-6.07}, rotation = {0,180,0} },
+        { tile = 84, position = {-5.25,1.12,-15.16}, rotation = {0,0,0} },
+        { tile = 86, position = {0,1.12,-18.19}, rotation = {0,180,0} },
+        { tile = 83, position = {5.25,1.12,-15.16}, rotation = {0,180,0} },
+        { tile = 85, position = {0,1.13,6.06}, rotation = {0,0,0} },
+        { tile = 88, position = {5.34,1.13,9.14}, rotation = {0,240,0} },
+        { tile = 83, position = {5.24,1.13,15.15}, rotation = {0,240,0} },
+        { tile = 86, position = {0,1.13,18.18}, rotation = {0,0,0} },
+        { tile = 84, position = {-5.25,1.13,15.15}, rotation = {0,120,0} },
+        { tile = 87, position = {-5.25,1.13,9.09}, rotation = {0,120,0} },
+        { tile = 0, seat = 1, position = {15.75,1.19,-9.09}, rotation = {0,180,0} },
+        { tile = 0, seat = 2, position = {-15.76,1.2,-9.1}, rotation = {0,180,0} },
+        { tile = 0, seat = 3, position = {-15.75,1.19,9.09}, rotation = {0,180,0} },
+        { tile = 0, seat = 4, position = {15.75,1.19,9.09}, rotation = {0,180,0} }
+    },
+    [5] = {
+        { tile = 88, position = {5.25,1.12,-9.1}, rotation = {0,180,0} },
+        { tile = 87, position = {-5.25,1.12,-9.1}, rotation = {0,180,0} },
+        { tile = 85, position = {0,1.12,-6.07}, rotation = {0,180,0} },
+        { tile = 84, position = {-5.25,1.12,-15.16}, rotation = {0,0,0} },
+        { tile = 86, position = {0,1.12,-18.19}, rotation = {0,180,0} },
+        { tile = 83, position = {5.25,1.12,-15.16}, rotation = {0,180,0} },
+        { tile = 0, seat = 1, position = {15.75,1.2,-9.09}, rotation = {0,180,0} },
+        { tile = 0, seat = 2, position = {-15.75,1.19,-9.09}, rotation = {0,180,0} },
+        { tile = 0, seat = 3, position = {-15.75,1.2,9.09}, rotation = {0,180,0} },
+        { tile = 0, seat = 4, position = {0,1.19,18.19}, rotation = {0,180,0} },
+        { tile = 0, seat = 5, position = {15.75,1.2,9.09}, rotation = {0,180,0} },
+    },
+    [7] = {
+        { tile = 85, position = {0,1.12,6.06}, rotation = {0,0,180} },
+        { tile = 84, position = {0,1.12,-6.07}, rotation = {0,0,180} },
+        { tile = 90, position = {-5.25,1.12,-3.04}, rotation = {0,180,180} },
+        { tile = 88, position = {5.25,1.12,15.15}, rotation = {0,0,180} },
+        { tile = 86, position = {5.25,1.12,-15.16}, rotation = {0,0,180} },
+        { tile = 83, position = {-15.75,1.12,3.03}, rotation = {0,300,180} },
+        { tile = 0, seat = 1, position = {15.75,1.2,-9.1}, rotation = {0,180,0} },
+        { tile = 0, seat = 2, position = {0,1.2,-24.25}, rotation = {0,180,0} },
+        { tile = 0, seat = 3, position = {-15.75,1.2,-15.16}, rotation = {0,180,0} },
+        { tile = 0, seat = 4, position = {-21,1.19,0}, rotation = {0,180,0} },
+        { tile = 0, seat = 5, position = {-15.75,1.19,15.16}, rotation = {0,180,0} },
+        { tile = 0, seat = 6, position = {0,1.2,24.25}, rotation = {0,180,0} },
+        { tile = 0, seat = 7, position = {15.75,1.2,9.1}, rotation = {0,180,0} },
+    },
+    [8] = {
+        { tile = 87, position = {0,1.12,6.06}, rotation = {0,240,0} },
+        { tile = 90, position = {5.25,1.12,3.03}, rotation = {0,0,180} },
+        { tile = 88, position = {0,1.12,-6.07}, rotation = {0,300,0} },
+        { tile = 89, position = {-5.25,1.12,-3.04}, rotation = {0,180,180} },
+        { tile = 85, position = {15.75,1.12,-3.04}, rotation = {0,300,180} },
+        { tile = 83, position = {-15.75,1.12,3.03}, rotation = {0,300,180} },
+        { tile = 0, seat = 1, position = {21,1.19,0}, rotation = {0,180,0} },
+        { tile = 0, seat = 2, position = {15.75,1.2,-15.16}, rotation = {0,180,0} },
+        { tile = 0, seat = 3, position = {0,1.2,-24.25}, rotation = {0,180,0} },
+        { tile = 0, seat = 4, position = {-15.75,1.2,-15.16}, rotation = {0,180,0} },
+        { tile = 0, seat = 5, position = {-21,1.19,0}, rotation = {0,180,0} },
+        { tile = 0, seat = 6, position = {-15.75,1.19,15.16}, rotation = {0,180,0} },
+        { tile = 0, seat = 7, position = {0,1.19,24.25}, rotation = {0,180,0} },
+        { tile = 0, seat = 8, position = {15.75,1.2,15.16}, rotation = {0,180,0} },
+    },
+}
+
+function onLoad(saveState)
+    self.addContextMenuItem('Add 8p hyperlanes', function() setupGeneric(HYPERLANES[8]) end)
+    self.addContextMenuItem('Add 7p hyperlanes', function() setupGeneric(HYPERLANES[7]) end)
+    self.addContextMenuItem('Add 5p hyperlanes', function() setupGeneric(HYPERLANES[5]) end)
+    self.addContextMenuItem('Add 4p hyperlanes', function() setupGeneric(HYPERLANES[4]) end)
+    self.addContextMenuItem('Add 3p hyperlanes', function() setupGeneric(HYPERLANES[3]) end)
+    self.addContextMenuItem('Add 2p heads up', function() setupGeneric(HYPERLANES[2]) end)
+    --self.addContextMenuItem('Print current', extractSetup)
+end
+
+function _findByName(name)
+    for _, object in ipairs(getAllObjects()) do
+        if object.getName() == name then
+            return object
+        end
+    end
+end
+
+function setupGeneric(tileAndTransforms)
+    local mapTool = _findByName('TI4 Map Tool')
+
+    local placedTileSet = {}
+    for _, tileAndTransform in ipairs(tileAndTransforms) do
+
+        local tile = assert(tileAndTransform.tile)
+        local system = tile ~= 0 and assert(_systemHelper.systemFromTile(tile))
+
+        local transform = tileAndTransform
+        local pos = {
+            x = assert(transform.position.x or transform.position[1]),
+            y = assert(transform.position.y or transform.position[2]),
+            z = assert(transform.position.z or transform.position[3]),
+        }
+        local rot = {
+            x = assert(transform.rotation.x or transform.rotation[1]),
+            y = assert(transform.rotation.y or transform.rotation[2]),
+            z = assert(transform.rotation.z or transform.rotation[3]),
+        }
+
+        if tile == 0 then
+            -- Home system
+            local seatIndex = assert(tileAndTransform.seat)
+            local homeColor = false
+            for _, zone in ipairs(_zoneHelper.zonesAttributes()) do
+                if zone.index == seatIndex then
+                    homeColor = zone.color
+                end
+            end
+            local home = homeColor and _findByName('Home System Location (' .. homeColor .. ')')
+            if home then
+                home.setPositionSmooth(pos, false, true)
+                home.setRotationSmooth(rot, false, true)
+                _zoneHelper.updateHomeSystemPosition({
+                    color = homeColor,
+                    position = pos
+                })
+            else
+                printToAll('Missing home system location tile for index ' .. seatIndex, 'Red')
+            end
+        elseif not placedTileSet[tile] then
+            -- First time tile is seen, take from bag.
+            placedTileSet[tile] = true
+            self.takeObject({
+                guid              = system.guid,
+                position          = pos,
+                rotation          = rot,
+                callback_function = function(object) _systemHelper.lockSystemTile(object.getGUID()) end,
+                smooth            = true,
+            })
+        elseif mapTool then
+            -- Repeat of same tile, make a clone.  Use full map tool support
+            -- in case anything looks at hyperlanes.
+            mapTool.call('cloneSystem', {
+                system            = copyTable(system),
+                position          = pos,
+                rotation          = rot,
+                lock              = true,
+            })
+        end
+    end
+end
+
+-- Use "chat_copy" from the console to extract.
+function extractSetup(playerColor)
+    local systems = _systemHelper.systems()
+
+    local hyperlanes = {}
+    local homes = {}
+    for _, object in ipairs(getAllObjects()) do
+        local system = systems[object.getGUID()]
+        if system and system.hyperlane then
+            table.insert(hyperlanes, {
+                tile = system.tile,
+                object = object
+            })
+        end
+        local homeColor = string.match(object.getName(), '^Home System Location %((.*)%)$')
+        local zoneAttrs = homeColor and _zoneHelper.zoneAttributes(homeColor)
+        if zoneAttrs then
+            table.insert(homes, {
+                seatIndex = zoneAttrs.index,
+                object = object
+            })
+        end
+    end
+
+    local function cleanValue(value, roundTo)
+        if roundTo then
+            value = math.floor((value + (roundTo / 2)) / roundTo) * roundTo
+        end
+        local rounded = math.floor(value + 0.5)
+        if math.abs(value - rounded) <= 0.02 then
+            return rounded
+        else
+            return math.floor(value * 100) / 100
+        end
+    end
+    local function cleanPos(xyz)
+        return {
+            cleanValue(xyz.x),
+            cleanValue(xyz.y),
+            cleanValue(xyz.z),
+        }
+    end
+    local function cleanRot(xyz)
+        return {
+            cleanValue(xyz.x, 30) % 360,
+            cleanValue(xyz.y, 30) % 360,
+            cleanValue(xyz.z, 30) % 360,
+        }
+    end
+
+    local result = {}
+    for _, hyperlane in ipairs(hyperlanes) do
+        local tile = assert(hyperlane.tile)
+        local pos = cleanPos(hyperlane.object.getPosition())
+        local rot = cleanRot(hyperlane.object.getRotation())
+        table.insert(result, table.concat({
+            '{ ',
+            'tile = ' .. tile,
+            ', ',
+            'position = {' .. pos[1] .. ',' .. pos[2] .. ',' .. pos[3] .. '}',
+            ', ',
+            'rotation = {' .. rot[1] .. ',' .. rot[2] .. ',' .. rot[3] .. '}',
+            ' }',
+        }, ''))
+    end
+    for _, home in ipairs(homes) do
+        local seatIndex = assert(home.seatIndex)
+        local pos = cleanPos(home.object.getPosition())
+        local rot = cleanRot(home.object.getRotation())
+        table.insert(result, table.concat({
+            '{ ',
+            'tile = 0, seat = ' .. seatIndex,
+            ', ',
+            'position = {' .. pos[1] .. ',' .. pos[2] .. ',' .. pos[3] .. '}',
+            ', ',
+            'rotation = {' .. rot[1] .. ',' .. rot[2] .. ',' .. rot[3] .. '}',
+            ' }',
+        }, ''))
+    end
+
+    local result = table.concat(result, ',\n')
+    printToAll('Dumping hyperlanes as an error message (easier to extract):', 'Red')
+    error('\n' .. result)
+end
+
+-------------------------------------------------------------------------------
+-- Index is only called when the key does not already exist.
+local _lockGlobalsMetaTable = {}
+function _lockGlobalsMetaTable.__index(table, key)
+    error('Accessing missing global "' .. tostring(key or '<nil>') .. '", typo?', 2)
+end
+function _lockGlobalsMetaTable.__newindex(table, key, value)
+    error('Globals are locked, cannot create global variable "' .. tostring(key or '<nil>') .. '"', 2)
+end
+setmetatable(_G, _lockGlobalsMetaTable)

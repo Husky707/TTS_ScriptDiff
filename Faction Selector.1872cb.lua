@@ -1,0 +1,684 @@
+-- @author Volverbot initial concept and design
+-- @author Milty
+-- @author Darrell switch to decals so images are visible with alt-zoom.
+--                 (XML UI is so much cleaner code, but not visible at zoom.)
+-- @author Subii - TE factions/Keleres
+-- @author Soru - TE/Keleres graphics
+-------------------------------------------------------------------------------
+
+function getHelperClient(helperObjectName)
+    local function getHelperObject()
+        for _, object in ipairs(getAllObjects()) do
+            if object.getName() == helperObjectName then return object end
+        end
+        error('missing object "' .. helperObjectName .. '"')
+    end
+    local helperObject = false
+    local function getCallWrapper(functionName)
+        helperObject = helperObject or getHelperObject()
+        if not helperObject.getVar(functionName) then error('missing ' .. helperObjectName .. '.' .. functionName) end
+        return function(parameters) return helperObject.call(functionName, parameters) end
+    end
+    return setmetatable({}, { __index = function(t, k) return getCallWrapper(k) end })
+end
+
+local _factionHelper = getHelperClient('TI4_FACTION_HELPER')
+local _setupHelper = getHelperClient('TI4_SETUP_HELPER')
+local _zoneHelper = getHelperClient('TI4_ZONE_HELPER')
+
+-------------------------------------------------------------------------------
+
+-- Display factions in list order.
+local FACTION_ID_AND_TOKEN_NAMES = {
+    { id = 'Arborec', tokenName = 'Arborec' },
+    { id = 'Letnev', tokenName = 'Barony of Letnev' },
+    { id = 'Saar', tokenName = 'Clan of Saar' },
+    { id = 'Muaat', tokenName = 'Embers of Muaat' },
+    { id = 'Hacan', tokenName = 'Emirates of Hacan' },
+    { id = 'Sol', tokenName = 'Federation of Sol' },
+    { id = 'Creuss', tokenName = 'Ghosts of Creuss' },
+    { id = 'L1Z1X', tokenName = 'L1Z1X Mindnet' },
+    { id = 'Mentak', tokenName = 'Mentak Coalition' },
+    { id = 'Naalu', tokenName = 'Naalu Collective' },
+    { id = 'Nekro', tokenName = 'Nekro Virus' },
+    { id = 'Sardakk', tokenName = "Sardakk N'orr", },
+    { id = 'JolNar', tokenName = 'Universities of Jol-Nar' },
+    { id = 'Winnu', tokenName = 'Winnu' },
+    { id = 'Xxcha', tokenName = 'Xxcha Kingdom' },
+    { id = 'Yin', tokenName = 'Yin Brotherhood' },
+    { id = 'Yssaril', tokenName = 'Yssaril Tribes' },
+    { id = 'Argent', tokenName = 'Argent Flight', pok = true },
+    { id = 'Cabal', tokenName = "Vuil'raith Cabal", pok = true },
+    { id = 'Empyrean', tokenName = 'Empyrean', pok = true },
+    { id = 'Mahact', tokenName = 'Mahact Gene-Sorcerers', pok = true },
+    { id = 'Nomad', tokenName = 'Nomad', pok = true },
+    { id = 'NRA', tokenName = 'Naaz-Rokha Alliance', pok = true },
+    { id = 'Titans', tokenName = 'Titans of Ul', pok = true },
+ -- ideally change POK to TE flag but not pressing as playing TE without POK is treacherous
+    { id = 'Keleres', tokenName = 'Keleres ~ Mentak', pok = true },
+    { id = 'Rebellion', tokenName = 'Crimson Rebellion', pok = true },
+    { id = 'Deepwrought', tokenName = 'Deepwrought Scholarate', pok = true },
+    { id = 'Bastion', tokenName = 'Last Bastion', pok = true },
+    { id = 'Firmament', tokenName = 'Firmament/Obsidian', pok = true },
+    { id = 'RalNel', tokenName = 'Ral-Nel Consortium', pok = true },
+}
+
+local IMAGE_TYPE_ATTRIBUTES = {
+    ['Button'] = {  -- faction image button, not nav bar
+        w = 500,
+        h = 400
+    },
+    ['BaseInfo'] = {
+        w = 1100,
+        h = 600
+    },
+    ['ExtraInfo'] = {
+        w = 1100,
+        h = 600
+    },
+}
+
+local SIZE = {
+    x = 16,
+    y = 0.2,
+    z = 10.85
+}
+
+local MARGIN = 175
+
+local FRANKEN_UNPACK_LABEL = 'FRANKEN'
+local FRANKEN_UNPACK_TOOLTIP = 'Unpack the given faction sheet and tokens, unpack starting tech and units and rename flagship based on Franken tiles in the player area.'
+
+local _customNameToUrl = false
+local _chosenFactionId = false
+local _includePoK = true
+local _keleresType = 'Mentak'
+
+--- Expose method of outsiders to select a faction.
+function selectFaction(tokenName)
+    assert(type(tokenName) == 'string')
+
+    -- Tolerate a variety of "faction names"
+    local faction = _factionHelper.fromTokenName(tokenName)
+    if not faction then
+        printToAll('selectFaction: no such faction "' .. tokenName .. '"', 'Red')
+        return false
+    end
+
+    -- If on the selector, pick it.
+    for _, entry in ipairs(FACTION_ID_AND_TOKEN_NAMES) do
+        if entry.tokenName == faction.tokenName then
+            local clickFunction = 'selectFaction_' .. entry.id
+            self.call(clickFunction)
+            return true
+        end
+    end
+
+    -- At this point not on the selector.  Try to draw the faction token (homebrew?).
+    local lookFor = faction.tokenName .. ' Faction Token'
+    local bag = false
+    local tokenOnTable = false
+    for _, object in ipairs(getAllObjects()) do
+        local name = object.getName()
+        if object.type == 'Bag' and name == 'Pick a Faction to Play' then
+            bag = object
+            break
+        end
+        if name == lookFor then
+            tokenOnTable = object
+        end
+    end
+    assert(bag, 'missing faction token bag')
+    local zone = _zoneHelper.zoneFromPosition(self.getPosition())
+    assert(zone, 'not in a player zone')
+    local zoneAttrs = _zoneHelper.zoneAttributes(zone)
+    local pos = {
+        x = zoneAttrs.center.x,
+        y = zoneAttrs.center.y + 3,
+        z = zoneAttrs.center.z
+    }
+    local rot = {
+        x = 0,
+        y = zoneAttrs.rotation.y,
+        z = 0
+    }
+
+    if tokenOnTable then
+        local collide = false
+        local fast = true
+        tokenOnTable.setPositionSmooth(pos, collide, fast)
+        tokenOnTable.setRotationSmooth(rot, collide, fast)
+        return true
+    end
+
+    for _, entry in ipairs(bag.getObjects()) do
+        if entry.name == lookFor then
+            bag.takeObject({
+                position          = pos,
+                rotation          = rot,
+                smooth            = true,
+                index             = entry.index,
+            })
+            return true
+        end
+    end
+
+    printToAll('selectFaction: faction "' .. tokenName .. '" not available on selection tool, homebrew?', 'Red')
+    return false
+end
+
+function doNothing() end
+
+function _addTitle()
+    local y = SIZE.y + 0.01
+    local z = -SIZE.z / 2 + 0.7
+
+    local labelNormal = 'Choose a Faction to Unpack'
+    local labelFranken = 'FRANKEN UNPACKER'
+    local label = _factionHelper.isFrankenEnabled() and labelFranken or labelNormal
+
+    self.createButton({
+        click_function = 'doNothing',
+        function_owner = self,
+        label          = label,
+        position       = { x = 0, y = y, z = z },
+        rotation       = { x = 0, y = 0, z = 0 },
+        scale          = { x = 1, y = 1, z = 1 },
+        width          = 0,
+        height         = 0,
+        font_size      = 300,
+        font_color     = { r = 1, g = 1, b = 1 },
+    })
+end
+
+function _addFactionButton(id, index, maxIndex)
+    local y = SIZE.y + 0.01
+
+    local reserved = 1.2
+
+    local numCols = 6
+    local numRows = math.ceil(maxIndex / numCols)
+
+    -- Cell sizes.
+    local w = SIZE.x / numCols
+    local h = (SIZE.z - reserved - 0.1) / numRows
+
+    local col = (index - 1) % numCols
+    local row = math.floor((index - 1) / numCols)
+
+    local x = (-SIZE.x / 2) + ((col + 0.5) * w)
+    local z = (-SIZE.z / 2) + ((row + 0.5) * h) + reserved
+
+    self.createButton({
+        click_function = 'selectFaction_' .. id,
+        function_owner = self,
+        label          = '',
+        position       = { x = x, y = y, z = z },
+        rotation       = { x = 0, y = 0, z = 0 },
+        scale          = { x = 1, y = 1, z = 1 },
+        width          = w * 500,
+        height         = h * 500,
+        font_size      = 200,
+        color          = { r = 1, g = 1, b = 1, a = 0 },
+        tooltip        = id
+    })
+
+    local buttonScale = 0.95
+    local attrs = IMAGE_TYPE_ATTRIBUTES['Button']
+    local decalSize = {
+        x = w * buttonScale,  -- should probably be respecting the aspect ratio here, but looks good
+        y = h * buttonScale,
+        z = 1
+    }
+
+    local url = _getUrl(id, 'Button')
+    if url then
+        self.addDecal({
+            name             = id,
+            url              = url,
+            position         = { x = -x, y = y, z = z },
+            rotation         = { 90, 0, 180 },
+            scale            = decalSize,  -- "scale" is size here
+        })
+    end
+end
+
+--- Get the custom asset image url.
+-- @param factionId string : id from FACTION_ID_AND_TOKEN_NAMES entry.
+-- @param imageType string : one of { Button, BaseInfo, ExtraInfo }.
+-- @return string : image url.
+function _getUrl(factionId, imageType)
+    assert(type(factionId) == 'string' and type(imageType) == 'string')
+    assert(IMAGE_TYPE_ATTRIBUTES[imageType])
+
+    if not _customNameToUrl then
+        _customNameToUrl = {}
+        for _, entry in ipairs(UI.getCustomAssets()) do
+            _customNameToUrl[entry.name] = entry.url
+        end
+    end
+
+    local customName = factionId .. imageType
+    return _customNameToUrl[customName]
+end
+
+function _addInfoDecal(factionId, imageType)
+    assert(type(factionId) == 'string' and type(imageType) == 'string')
+    assert(IMAGE_TYPE_ATTRIBUTES[imageType])
+
+    local y = SIZE.y + 0.01
+    local url = _getUrl(factionId, imageType)
+
+    local reservedForButtons = 2
+    local z = -reservedForButtons / 2
+    local fitZ = SIZE.z - (MARGIN / 1000) * 2 - reservedForButtons
+
+    -- Decal stretches to object aspect ratio.  Need to adjust it.
+    -- DECAL SCALE Z IS STORED IN Y!
+    local attrs = IMAGE_TYPE_ATTRIBUTES[imageType]
+    local size = {
+        x = fitZ * (attrs.w / attrs.h),
+        y = fitZ,
+        z = 1,
+    }
+
+    if url then
+        self.addDecal({
+            name             = factionId,
+            url              = url,
+            position         = { 0, y, z },
+            rotation         = { 90, 0, 180 },
+            scale            = size -- "scale" is size here
+        })
+    end
+end
+
+function _createNavButtons(currentPanelImageType)
+    assert(type(currentPanelImageType) == 'string')
+    assert(IMAGE_TYPE_ATTRIBUTES[currentPanelImageType])
+
+
+    -- local SIZE = {
+    -- x = 16,
+    -- y = 0.2,
+    -- z = 10.85
+    -- }
+
+    local y = SIZE.y + 0.01
+    -- button size are in x1000 scale.  width is the left/right value, so
+    -- actual width is x2 width.
+    local w = ((SIZE.x * 1000) - (MARGIN * 5)) / 8
+    local w3 = ((SIZE.x * 1000) - ((MARGIN) * 4)) / 6
+
+    local h = 800
+    local fontSize = 300
+    local scaleUpScaleDown = 1
+    local activeColor = { r = 0, g = 1, b = 1 }
+
+    local x0 = -(SIZE.x / 2) + (MARGIN + w) / 1000
+    local dx = (MARGIN + w * 2) / 1000
+    local x03 = -(SIZE.x / 2) + (MARGIN + w3) / 1000
+    local dx3 = (MARGIN + w3 * 2) / 1000
+
+    local z0 = (SIZE.z / 2) - (h + MARGIN) / 1000
+    local dz = (MARGIN + h * 2) / 1000 --KelButtonValue
+
+    local x = x03
+    local z = z0
+
+    local defaultColor = { r = 1, g = 1, b = 1 }
+
+-- Keleres Specific Subfaction Select
+    if _chosenFactionId == 'Keleres' then
+        self.createButton({
+            click_function = 'keleMent',
+            function_owner = self,
+            label          = 'Keleres:\nMentak',
+            position       = { x = x, y = y, z = z },
+            rotation       = { x = 0, y = 0, z = 0 },
+            scale          = { x = 1 / scaleUpScaleDown, y = 1, z = 1 / scaleUpScaleDown },
+            width          = w3 * scaleUpScaleDown,
+            height         = h * scaleUpScaleDown,
+            font_size      = fontSize * scaleUpScaleDown,
+            color          = _keleresType == 'Mentak' and activeColor or defaultColor,
+            font_color     = nil,
+            hover_color    = nil,
+            press_color    = nil,
+            tooltip        = 'Select Keleres-Mentak Variant',
+        })
+        x = x + dx3
+        self.createButton({
+            click_function = 'keleArge',
+            function_owner = self,
+            label          = 'Keleres:\nArgent',
+            position       = { x = x, y = y, z = z },
+            rotation       = { x = 0, y = 0, z = 0 },
+            scale          = { x = 1 / scaleUpScaleDown, y = 1, z = 1 / scaleUpScaleDown },
+            width          = w3 * scaleUpScaleDown,
+            height         = h * scaleUpScaleDown,
+            font_size      = fontSize * scaleUpScaleDown,
+            color          = _keleresType == 'Argent' and activeColor or defaultColor,
+            font_color     = nil,
+            hover_color    = nil,
+            press_color    = nil,
+            tooltip        = 'Select Keleres-Argent Variant',
+        })
+        x = x + dx3
+        self.createButton({
+            click_function = 'keleXxch',
+            function_owner = self,
+            label          = 'Keleres:\nXxcha',
+            position       = { x = x, y = y, z = z },
+            rotation       = { x = 0, y = 0, z = 0 },
+            scale          = { x = 1 / scaleUpScaleDown, y = 1, z = 1 / scaleUpScaleDown },
+            width          = w3 * scaleUpScaleDown,
+            height         = h * scaleUpScaleDown,
+            font_size      = fontSize * scaleUpScaleDown,
+            color          = _keleresType == 'Xxcha' and activeColor or defaultColor,
+            font_color     = nil,
+            hover_color    = nil,
+            press_color    = nil,
+            tooltip        = 'Select Keleres-Xxcha Variant',
+        })
+        z = z + dz
+    end
+    x = x0
+    ------------------------------
+    self.createButton({
+        click_function = 'onClickBack',
+        function_owner = self,
+        label          = 'Back',
+        position       = { x = x, y = y, z = z },
+        rotation       = { x = 0, y = 0, z = 0 },
+        scale          = { x = 1 / scaleUpScaleDown, y = 1, z = 1 / scaleUpScaleDown },
+        width          = w * scaleUpScaleDown,
+        height         = h * scaleUpScaleDown,
+        font_size      = fontSize * scaleUpScaleDown,
+        color          = defaultColor,
+        font_color     = nil,
+        hover_color    = nil,
+        press_color    = nil,
+        tooltip        = 'Return to faction selection',
+    })
+    x = x + dx
+    self.createButton({
+        click_function = 'onClickBaseInfo',
+        function_owner = self,
+        label          = 'Faction\nAbilities',
+        position       = { x = x, y = y, z = z },
+        rotation       = { x = 0, y = 0, z = 0 },
+        scale          = { x = 1 / scaleUpScaleDown, y = 1, z = 1 / scaleUpScaleDown },
+        width          = w * scaleUpScaleDown,
+        height         = h * scaleUpScaleDown,
+        font_size      = fontSize * scaleUpScaleDown,
+        color          = currentPanelImageType == 'BaseInfo' and activeColor or defaultColor,
+        font_color     = nil,
+        hover_color    = nil,
+        press_color    = nil,
+        tooltip        = 'Display faction base information',
+    })
+    x = x + dx
+    self.createButton({
+        click_function = 'onClickExtraInfo',
+        function_owner = self,
+        label          = 'More\nInfo',
+        position       = { x = x, y = y, z = z },
+        rotation       = { x = 0, y = 0, z = 0 },
+        scale          = { x = 1 / scaleUpScaleDown, y = 1, z = 1 / scaleUpScaleDown },
+        width          = w * scaleUpScaleDown,
+        height         = h * scaleUpScaleDown,
+        font_size      = fontSize * scaleUpScaleDown,
+        color          = currentPanelImageType == 'ExtraInfo' and activeColor or defaultColor,
+        font_color     = nil,
+        hover_color    = nil,
+        press_color    = nil,
+        tooltip        = 'Display additional faction information',
+    })
+    x = x + dx
+    self.createButton({
+        click_function = 'onClickUnpack',
+        function_owner = self,
+        label          = _factionHelper.isFrankenEnabled() and FRANKEN_UNPACK_LABEL or 'Unpack',
+        position       = { x = x, y = y, z = z },
+        rotation       = { x = 0, y = 0, z = 0 },
+        scale          = { x = 1 / scaleUpScaleDown, y = 1, z = 1 / scaleUpScaleDown },
+        width          = w * scaleUpScaleDown,
+        height         = h * scaleUpScaleDown,
+        font_size      = fontSize * scaleUpScaleDown,
+        color          = defaultColor,
+        font_color     = nil,
+        hover_color    = nil,
+        press_color    = nil,
+        tooltip        = _factionHelper.isFrankenEnabled() and FRANKEN_UNPACK_TOOLTIP or 'Unpack this faction',
+    })
+end
+
+-------------------------------------------------------------------------------
+
+local function _includeFaction(tokenName)
+    local faction = _factionHelper.fromTokenName(tokenName)
+    if faction.source == 'PoK' and not _includePoK then
+        return false
+    end
+    return true
+end
+
+function showFactionSelection()
+    self.clearButtons()
+    self.setDecals({})
+    _addTitle()
+    for i, idAndTokenName in ipairs(FACTION_ID_AND_TOKEN_NAMES) do
+        local id = idAndTokenName.id
+        if _includeFaction(idAndTokenName.tokenName) then
+            _addFactionButton(id, i, 30)
+        end
+    end
+
+    if _factionHelper.isFrankenEnabled() then
+        self.setColorTint({ r = 49/255, g = 179/255, b = 43/255 })
+    end
+end
+
+function showExtraInfo(factionId)
+    self.clearButtons()
+    self.setDecals({})
+    _addInfoDecal(factionId, 'ExtraInfo')
+    _createNavButtons('ExtraInfo')
+end
+
+function showBaseInfo(factionId)
+    self.clearButtons()
+    self.setDecals({})
+    _addInfoDecal(factionId, 'BaseInfo')
+    _createNavButtons('BaseInfo')
+end
+
+function showExtraInfo(factionId)
+    self.clearButtons()
+    self.setDecals({})
+    _addInfoDecal(factionId, 'ExtraInfo')
+    _createNavButtons('ExtraInfo')
+end
+
+
+-------------------------------------------------------------------------------
+
+function onLoad()
+    self.addContextMenuItem('Unpack faction token', doUnpackUsingFactionToken)
+
+    -- Normal buttons are not as flexible, create a function for each.
+    for _, idAndTokenName in ipairs(FACTION_ID_AND_TOKEN_NAMES) do
+        local id = idAndTokenName.id
+        local function selectFactionInternal()
+            _chosenFactionId = id
+            showBaseInfo(id)
+        end
+        self.setVar('selectFaction_' .. id, selectFactionInternal)
+    end
+
+    Wait.frames(showFactionSelection, 2)
+end
+
+function onFrankenEnabled()
+    showFactionSelection()
+end
+
+function onSetupHelperSetupFinished(params)
+    if not params.isRightClick then
+        -- Hide PoK if not enabled when commiting to setup.  Note this gets
+        -- reset across save/load, to avoid this need more save state.
+        _includePoK = _setupHelper.getPoK()
+        Wait.frames(showFactionSelection, 2)
+    end
+end
+
+-------------------------------------------------------------------------------
+
+function keleMent(clickObject, clickerColor, altClick)
+    assert(_chosenFactionId)
+    for _, faction in ipairs(FACTION_ID_AND_TOKEN_NAMES) do
+        if faction.id == "Keleres" then
+            faction.tokenName = "Keleres ~ Mentak"
+            break
+        end
+    end
+    _keleresType = 'Mentak'
+    showBaseInfo(_chosenFactionId)
+end
+
+function keleArge(clickObject, clickerColor, altClick)
+    assert(_chosenFactionId)
+    for _, faction in ipairs(FACTION_ID_AND_TOKEN_NAMES) do
+        if faction.id == "Keleres" then
+            faction.tokenName = "Keleres ~ Argent"
+            break
+        end
+    end
+    _keleresType = 'Argent'
+    showBaseInfo(_chosenFactionId)
+end
+
+function keleXxch(clickObject, clickerColor, altClick)
+    assert(_chosenFactionId)
+    for _, faction in ipairs(FACTION_ID_AND_TOKEN_NAMES) do
+        if faction.id == "Keleres" then
+            faction.tokenName = "Keleres ~ Xxcha"
+            break
+        end
+    end
+    _keleresType = 'Xxcha'
+    showBaseInfo(_chosenFactionId)
+end
+
+function onClickBaseInfo(clickObject, clickerColor, altClick)
+    assert(_chosenFactionId)
+    showBaseInfo(_chosenFactionId)
+end
+
+function onClickExtraInfo(clickObject, clickerColor, altClick)
+    assert(_chosenFactionId)
+    showExtraInfo(_chosenFactionId)
+end
+
+function onClickBack(clickObject, clickerColor, altClick)
+    assert(_chosenFactionId)
+    _chosenFactionId = false
+    showFactionSelection()
+end
+
+function onClickUnpack(clickObject, clickerColor, altClick)
+    assert(_chosenFactionId)
+
+    local factionTokenName = false
+    for _, idAndTokenName in ipairs(FACTION_ID_AND_TOKEN_NAMES) do
+        if idAndTokenName.id == _chosenFactionId then
+            factionTokenName = idAndTokenName.tokenName
+            break
+        end
+    end
+    doUnpack(factionTokenName)
+end
+
+-------------------------------------------------------------------------------
+
+function doUnpack(factionTokenName)
+    -- Abort if setup pending.  Cannot rearrange table after faction unpack.
+    local function setupPending()
+        for _, object in ipairs(getAllObjects()) do
+            if object.tag == 'Generic' and object.getName() == 'Game Setup Options' then
+                return true
+            end
+        end
+    end
+    if setupPending() then
+        printToAll('Faction unpack: please click "Setup" on "Game Setup Options" to commit to a player count and map size before unpacking.', 'Yellow')
+        return
+    end
+
+    -- Abort if not in a player area.
+    local color = _zoneHelper.zoneFromPosition(self.getPosition())
+    if not color then
+        printToAll('Faction unpack: unpacker not in a player area, aborting.', 'Yellow')
+        return
+    end
+
+    -- Abort if missing faction, or if that faction is already in use.
+    local faction = _factionHelper.fromTokenName(factionTokenName)
+    if not faction then
+        printToAll('Faction unpack: unknown faction, aborting.', 'Yellow')
+        return
+    end
+    if faction.color then
+        printToAll(faction.color .. ' has already unpacked ' .. factionTokenName .. ', please pick another.', color)
+        return
+    end
+    printToAll(color .. ' unpacking ' .. factionTokenName .. '.', color)
+
+    if _factionHelper.isFrankenEnabled() then
+        _setupHelper.unpackFranken({
+            color = color,
+            factionTokenName = factionTokenName,
+            unpackButtonGuid = self.getGUID()  -- setup will delete this object
+        })
+    else
+        _setupHelper.unpackFaction({
+            color = color,
+            factionTokenName = factionTokenName,
+            unpackButtonGuid = self.getGUID()  -- setup will delete this object
+        })
+    end
+end
+
+-- Unpack based on "!FACTION Faction Token" object in player area.
+function doUnpackUsingFactionToken()
+    local color = _zoneHelper.zoneFromPosition(self.getPosition())
+    local factionTokenName = false
+    for _, object in ipairs(getAllObjects()) do
+        local name = object.getName()
+        local candidate = string.match(name, '^(.*) Faction Token$')
+        if candidate and (_zoneHelper.zoneFromPosition(object.getPosition()) == color) then
+            if factionTokenName then
+                printToAll('Faction unpack: multiple faction tokens found for ' .. color .. ', aborting', 'Yellow')
+                return
+            end
+            factionTokenName = candidate
+        end
+    end
+    if not factionTokenName then
+        printToAll('Faction unpack: no faction token found for ' .. color .. ', aborting', 'Yellow')
+        return
+    end
+
+    doUnpack(factionTokenName)
+end
+
+-------------------------------------------------------------------------------
+-- Index is only called when the key does not already exist.
+local _lockGlobalsMetaTable = {}
+function _lockGlobalsMetaTable.__index(table, key)
+    error('Accessing missing global "' .. tostring(key or '<nil>') .. '", typo?', 2)
+end
+function _lockGlobalsMetaTable.__newindex(table, key, value)
+    error('Globals are locked, cannot create global variable "' .. tostring(key or '<nil>') .. '"', 2)
+end
+setmetatable(_G, _lockGlobalsMetaTable)

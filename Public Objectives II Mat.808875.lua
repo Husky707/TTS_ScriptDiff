@@ -1,0 +1,24 @@
+function getHelperClient(helperObjectName)
+    local function getHelperObject()
+        for _, object in ipairs(getAllObjects()) do
+            if object.getName() == helperObjectName then return object end
+        end
+        error('missing object "' .. helperObjectName .. '"')
+    end
+    local helperObject = false
+    local function getCallWrapper(functionName)
+        helperObject = helperObject or getHelperObject()
+        if not helperObject.getVar(functionName) then error('missing ' .. helperObjectName .. '.' .. functionName) end
+        return function(parameters) return helperObject.call(functionName, parameters) end
+    end
+    return setmetatable({}, { __index = function(t, k) return getCallWrapper(k) end })
+end
+local _setupHelper = getHelperClient('TI4_SETUP_HELPER')
+
+function onLoad(save_state)
+    self.addContextMenuItem('Deal Objectives', dealObjectives)
+end
+
+function dealObjectives()
+    _setupHelper.dealObjectives()
+end
