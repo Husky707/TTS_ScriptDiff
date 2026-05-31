@@ -269,8 +269,8 @@ local _unitOverrides = {
 	['Eanautic'] = { override = 'Mech', production = 1, },
 	['Viper EX-23'] = { override = 'Mech', },
     ----- Units
-    ['4X4IC "Helios" VI'] = { override = 'Space Dock' },
-    ['4X4IC "Helios" V2'] = { upgrade = 'Space Dock', production = -4, },
+    ['4X41C "Helios" VI'] = { override = 'Space Dock' },
+    ['4X41C "Helios" V2'] = { upgrade = 'Space Dock', production = -4, },
 	['Linkship I'] = { override = 'Destroyer', spaceCombat = { hit = 9 }, antiFighterBarrage = { dice = 2, hit = 9}, spaceCannon = { dice = 0, hit = 10, requireLink = 1, extraDice = 0 }, },
 	['Linkship II'] = { upgrade = 'Destroyer', spaceCombat = { hit = 8 }, antiFighterBarrage = { dice = 3, hit = 6}, spaceCannon = { dice = 0, hit = 10, requireLink = 0, extraDice = 0 }, },	
 	['Exile I'] = { override = 'Destroyer', spaceCombat = { hit = 8 }, antiFighterBarrage = { dice = 2, hit = 9}, },

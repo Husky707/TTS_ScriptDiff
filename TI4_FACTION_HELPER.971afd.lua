@@ -638,11 +638,11 @@ local _factionAttributes = {
         flagshipDescription = 'Apply +1 to the results of each of this units combat rolls for each non-homesystem that contains a planet you control.',
 		startMessage = 'Choose 1 blue or yellow technology that has no prerequisites.',
         abilities = { 'Liberate', 'Galvanize', 'Pheonix Standard' },
-        units = { '4X4IC "Helios" VI', '4X4IC "Helios" V2', 'A3 Valiance' },
+        units = { '4X41C "Helios" VI', '4X41C "Helios" V2', 'A3 Valiance' },
         commander = 'Nip And Tuck',
         hero = 'Entity 4X41A "Apollo"',
         commodities = 1,
-        promissoryNotes = { 'Raise The Standard' },
+        promissoryNotes = { 'Raise the Standard' },
         breakthrough = 'The Icon'
 	},
 	
@@ -662,7 +662,7 @@ local _factionAttributes = {
         commander = 'Watchful Ojz',
         hero = 'Signal Intrusion',
         commodities = 4,
-        promissoryNotes = { 'Nano Link Permit' },
+        promissoryNotes = { 'Nano-Link Permit' },
         breakthrough = 'Data Skimmer'
 	},
 	
@@ -714,7 +714,7 @@ local _factionAttributes = {
         home = 96,
         startingUnits = { Carrier = 1, Cruiser = 1, Destroyer = 1, Fighter = 3, Infantry = 3, Space_Dock = 1 },
         startingTech = { },
-		factionTech = { "Neural Parasite", "Planesplitter" },
+		factionTech = { "Nueral Parasite", "Planesplitter" },
         flagship = "Heaven's Eye",
         flagshipDescription = 'If the active system contains units that belong to a player who has a control token on 1 of your plots apply +1 to this ships move value and repair it at the end of every round of combat.',
 		startMessage = 'Choose 1 green or yellow technology that has no prerequisites.',
@@ -723,7 +723,7 @@ local _factionAttributes = {
         commander = 'Captain Aroz',
         hero = 'The Blade Beckons',
         commodities = 3,
-        promissoryNotes = { 'Black Ops', 'Manevolency' },
+        promissoryNotes = { 'Black Ops', 'Malevolency' },
         breakthrough = 'The Sowing/The Reaping'
 	},
 	
@@ -734,7 +734,7 @@ local _factionAttributes = {
         home = 96,
         startingUnits = { Carrier = 1, Cruiser = 1, Destroyer = 1, Fighter = 3, Infantry = 3, Space_Dock = 1 },
         startingTech = { },
-		factionTech = { "Neural Parasite", "Planesplitter" },
+		factionTech = { "Nueral Parasite", "Planesplitter" },
         flagship = "Heaven's Eye",
         flagshipDescription = 'If the active system contains units that belong to a player who has a control token on 1 of your plots apply +1 to this ships move value and repair it at the end of every round of combat.',
 		startMessage = 'Choose 1 green or yellow technology that has no prerequisites.',
@@ -1234,38 +1234,38 @@ local _commodityModifiers = {
         order = "ADD",
         target = "OWNER"
     },
-    ['+1 Commodity'] = {
-        value = 1,
+    ['$$ Commodity'] = { -- "+|-1 Commodity"
+        get = function(base, current, obj, color)
+            if obj == nil then return 0 end
+
+            local num = string.match(obj.getName(), "^[-+]%d+")
+            return num and tonumber(num) or 0
+        end,
         order = "ADD",
         target = "OWNER"
     },
-    ['-1 Commodity'] = {
-        value = -1,
-        order = "ADD",
-        target = "OWNER"
-    },
-    ['Dynamis Core'] = {
+    ['Dynamis Core Token'] = {
         value = 2,
         requiredFacing = true,
         order = "ADD",
         target = "OWNER"
     },
-    ['The Watchtower'] = {
+    ['The Watchtower Token'] = {
         value = 1,
         order = "ADD",
         target = "OWNER"
     },
-    ['Oluz Station'] = {
+    ['Oluz Station Token'] = {
         value = 1,
         order = "ADD",
         target = "OWNER"
     },
-    ['Tsion Station'] = {
+    ['Tsion Station Token'] = {
         value = 1,
         order = "ADD",
         target = "OWNER"
     },
-    ['Revelation'] = {
+    ['Revelation Token'] = {
         value = 1,
         order = "ADD",
         target = "OWNER"

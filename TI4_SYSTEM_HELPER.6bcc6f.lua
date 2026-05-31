@@ -28,6 +28,7 @@ local _deckHelper = getHelperClient('TI4_DECK_HELPER')
 local _factionHelper = getHelperClient('TI4_FACTION_HELPER')
 local _unitHelper = getHelperClient('TI4_UNIT_HELPER')
 local _zoneHelper = getHelperClient('TI4_ZONE_HELPER')
+local _exploreHelper = getHelperClient('TI4_EXPLORE_HELPER')
 
 local function copyTable(t)
     if t and type(t) == 'table' then
@@ -51,17 +52,19 @@ end
 -- - rotate: override, degrees number.
 -- - localY: override tile height (ghosts home system).
 -- - hyperlane: boolean, true if a hyperlane.
--- - offMap: boolean, if true not part of the system map (e.g. do not count for slice r/i).
+-- - offMap: boolean: if true, tile is not part of the system map (e.g. do not count for slice r/i).
 --
 -- Planet attributes:
 -- - name: string.
 -- - resources: number.
 -- - influence: number.
 -- - trait: string or array of strings {cultural|industrial|hazardous}.
--- - tech: string or array of strings {red|green|yellow|blue}.
+-- - tech: string --*Support is WIP for array of strings {red|green|yellow|blue}.
 -- - position: table with {xz}: override, local space.
 -- - radius: number: override, local space.
 -- - legendary: boolean.
+-- - station: boolean|number: If a number is provided, that station boosts comms by that amount (instead of 1)
+-- - stationTokenName: *string: If you wish to provide a custom name for the token. Default is (planet.name.." Token")
 --
 -- Also computed:
 -- - system.guid: tile GUID.
@@ -404,13 +407,13 @@ local _systems = {
     ['1684ac'] = { tile = 113, anomalies = { 'gravity rift' }, wormholes = { 'beta' } },
     ['82db8b'] = { tile = 114, anomalies = { 'entropic scar' } },
     ['4d99d0'] = { tile = 115, anomalies = { 'astroid field' }, planets = {
-        { name = 'Industrex', resources = 2, influence = 0, trait = 'industrial', tech = 'red', radius = 1.5, legendary = true, legendaryCard = 'Aeurex Mechanica' }
+        { name = 'Industrex', resources = 2, influence = 0, trait = 'industrial', tech = 'red', legendary = true, legendaryCard = 'Aeurex Mechanica' }
 	}},
 	['2c570b'] = { tile = 116, anomalies = { 'entropic scar' }, planets = {
         { name = 'Lemox', resources = 0, influence = 3, trait = 'industrial' }
 	}},
 	['e1f04c'] = { tile = 117, anomalies = { 'astroid field' , 'gravity rift' }, planets = {
-        { name = 'The Watchtower', resources = 1, influence = 1, station = true }
+        { name = 'The Watchtower', resources = 1, influence = 1, station = true, position = { x = -.57, z = 0.58 }, radius = .8 }
 	}},
 	['987aa2'] = { tile = 118, home = true, wormholes = { 'epsilon' }, offMap = true, planets = {
 		{ name = 'Ahk Creuxx', resources = 4, influence = 2, position = { x = -0.05, z = -0.4 }, radius = 0.8 }
@@ -431,14 +434,14 @@ local _systems = {
         { name = 'Phlegethon', resources = 1, influence = 2 },
     }},
 	----- Twilight Fall Home Systems
-    ['370d1c'] = { tile = 601, },
-    ['63062b'] = { tile = 602, },
-    ['487e79'] = { tile = 603, },
-    ['98cd74'] = { tile = 604, },
-    ['bc8634'] = { tile = 605, },
-    ['398533'] = { tile = 606, },
-    ['8b81e4'] = { tile = 607, },
-    ['860763'] = { tile = 608, },
+    ['370d1c'] = { tile = 601, home = true},
+    ['63062b'] = { tile = 602, home = true},
+    ['487e79'] = { tile = 603, home = true},
+    ['98cd74'] = { tile = 604, home = true},
+    ['bc8634'] = { tile = 605, home = true},
+    ['398533'] = { tile = 606, home = true},
+    ['8b81e4'] = { tile = 607, home = true},
+    ['860763'] = { tile = 608, home = true},
 
     -- Hyperlane tiles
     -- hyperlanes is an array of 6 indices, representing hyperlane connexion. Indices are zero-based (0 to 6)
@@ -1210,71 +1213,6 @@ function applyResInfModifiers(params)
     return cards
 end
 
---- Let homebrew add custom systems via runtime injection.
--- @param system: system table.
-function injectSystem(system)
-    assert(type(system) == 'table')
-
-    -- Unclear if the systems are shared with the caller, make a copy to be
-    -- sure any later mutations to the caller's version does not change this.
-    system = copyTable(system)
-
-    local guid = system.guid
-    if not guid or type(guid) ~= 'string' then
-        error('injectSystem: missing guid')
-    end
-    local success, errorMessage = _systemIsValid(system)
-    if not success then
-        error('injectSystem: ' .. guid .. ' ' .. errorMessage)
-    end
-    system.guid = nil  -- force rebuild of any auto-generated fields
-    system._homebrew = true
-    _systems[guid] = system
-    _fillMissingSystemData(guid, system)
-
-    --Auto-inject any stations for commodity modifiers
-    for _,each in ipairs(system.planets or {}) do
-        if each.station then
-            _factionHelper.injectCommodityModifier({name = each.name, value = type(each.station) == "number" and each.station or 1})
-        end
-    end
-end
-
----@param params.name string : Name should match the card object's name
----@param params.resources number? : The resource value
----@param params.influence number? : The influence value
----@param params.get table? : A CallData table that points to a function that returns the resource and influence value
-    --CallData table: {guid = 'guid of the script object that owns your function', func = 'function name to call'}
-    --Your function will recieve the object reference of the card object as the only param. Return 2 values (influence, resources)
-function injectResourceInfluenceModifier(params)
-    assert(type(params.name) == 'string', 'bad name')
-    assert((not params.resource) or type(params.resource) == 'number', 'bad resource')
-    assert((not params.influence) or type(params.influence) == 'number' , 'bad influence')
-    
-    local mod = copyTable(params)
-    if mod.get then
-        assert(mod.get.guid and type(mod.get.guid) == "string", 'Invalid CallData table for '..mod.name..': non-string guid')
-        assert(mod.get.func and type(mod.get.func) == "string", "Invalid CallData table for "..mod.name..": non-string .func")
-        mod.callData = mod.get
-        mod.get = function(card)
-            local script = mod.callData.obj ~= nil and mod.callData.obj or getObjectFromGUID(mod.callData.guid)
-            if not script then return 0,0 end
-            mod.callData.obj = script
-            assert(script.getVar(mod.callData.func), script.getName().." does not have a global function called: "..mod.callData.func)
-            local i,r = script.call(mod.callData.func, card)
-            return i or 0, r or 0
-        end
-    end
-    
-    for i, entry in ipairs(_nonPlanetResourceInfluenceCards) do
-        if entry.name == mod.name then
-            _nonPlanetResourceInfluenceCards[i] = mod
-            return
-        end
-    end
-    table.insert(_nonPlanetResourceInfluenceCards, mod)
-end
-
 function verifyAllSystems()
     local errors = false
     for guid, system in pairs(_systems) do
@@ -1573,6 +1511,260 @@ function _fillMissingSystemData(guid, system)
             end
         end
     end
+end
+
+-----------------------------------------------------------------------------
+
+--Objects that have some effect when dropped in a system (Diplo/Warfare token, ect, injectable)
+local DropUtils = {
+    _activeDrops = {},
+    animate = function(col, system, obj)
+        local base = obj.getScale()
+        obj.interactable = false
+        obj.use_gravity = false
+        obj.setPosition(obj.getPosition()) --kill momentum
+        obj.setLock(true)
+        local hb = obj.getComponent("Collider")
+        hb.set("enabled", false)
+        local scaleMod = 1.75
+        for i = 0, 30 do
+            coroutine.yield()
+            if obj == nil then print("escaped on ",i) return end
+            local rad = math.sin((i*6*math.pi)/180)
+            local scale = {x = base.x+(scaleMod*rad), z = base.z+(scaleMod*rad), y = base.y}
+            obj.setScale(scale)
+        end
+        obj.setScale(base)
+        obj.interactable = true
+        obj.use_gravity = true
+        obj.setLock(false)
+        hb.set("enabled", true)
+    end,
+    doNothing = function() end
+}
+local _systemDroppables = {
+    ["Diplomacy Token"] = {
+        requireTurn = false,
+        onDrop = {function(color,system) _diploSystem(color, system) end},
+        returnInfo = {position = {x=6.43,y = 3, z=-2.47}, parent = "4ffb3b"},
+        onConsume = {DropUtils.animate, function(color, system, obj) DropUtils.returnComponent(color, system, obj) end}
+    },
+    ["Activation Token"] = {
+        requireTurn = false,
+        onDrop = {function(color,system) _activateSystem(color,system) end},
+        returnInfo = {position = {x=-6.33,z=-2.3}, parent = "4ffb3b"},
+        onConsume = {DropUtils.animate, function(color,system,obj) DropUtils.returnComponent(color,system,obj) end}
+    },
+    ["Scepter of Dominion"] = {
+        requireTurn = false,
+        onDrop = {function(color,system) _scepterDiplo(color,system) end},
+        returnInfo = {position = {y=4}, parent = "TI4 Graveyard"},
+        onConsume = {DropUtils.animate, function(color,system,obj) DropUtils.returnComponent(color,system,obj) end}
+    }
+}
+
+DropUtils.onDrop = function(color, obj, objName)
+    if DropUtils._activeDrops[obj] then
+        printToColor(("Drop effect failed: "..objName.."'s drop effect is already being resolved."), color, "Red")
+        return
+    end
+
+    local dropData = assert(_systemDroppables[(objName or obj.getName())])
+    if dropData.requireTurn and color ~= Turns.turn_color then
+        return
+    end
+    local system = systemFromPosition(obj.getPosition())
+    if not system then return end
+
+    DropUtils._activeDrops[obj] = true
+    resolveDropCo = function()
+        for i,each in ipairs(dropData.onDrop or {}) do
+            each(color, system, obj)
+        end
+        coroutine.yield()
+        for i,each in ipairs(dropData.onConsume or {}) do
+            each(color, system, obj)
+        end
+        coroutine.yield()
+        DropUtils._activeDrops[obj] = nil
+        return 1
+    end
+    startLuaCoroutine(self, "resolveDropCo")
+end
+
+DropUtils.returnComponent = function(col,system, obj)
+    if obj == nil then return end
+    local dropData = _systemDroppables[obj.getName()]
+    if not dropData or not dropData.returnInfo then return end
+
+    position = dropData.returnInfo.position or {}
+    local pos = {x = position.x or 0, y = position.y or 1, z = position.z or 0}
+
+    local parent = dropData.returnInfo.parent
+    if parent then
+        if type(parent) == "string" then
+            --guid?
+            local pObj = getObjectFromGUID(parent)
+            if not pObj then --find by name
+                for _,each in ipairs(getAllObjects()) do
+                    if each.getName() == parent then
+                        pObj = each
+                        break
+                    end
+                end
+            end
+            parent = pObj
+        end
+        if type(parent) == "userdata" then
+            pos = parent.positionToWorld(pos)
+        end
+    end
+    obj.setPosition(pos)
+end
+
+--Injection-----------------------------------------------------------------------------
+
+--- Let homebrew add custom systems via runtime injection.
+-- @param system: system table.
+function injectSystem(system)
+    assert(type(system) == 'table')
+
+    -- Unclear if the systems are shared with the caller, make a copy to be
+    -- sure any later mutations to the caller's version does not change this.
+    system = copyTable(system)
+
+    local guid = system.guid
+    if not guid or type(guid) ~= 'string' then
+        error('injectSystem: missing guid')
+    end
+    local success, errorMessage = _systemIsValid(system)
+    if not success then
+        error('injectSystem: ' .. guid .. ' ' .. errorMessage)
+    end
+    system.guid = nil  -- force rebuild of any auto-generated fields
+    system._homebrew = true
+    _systems[guid] = system
+    _fillMissingSystemData(guid, system)
+
+    --Auto-inject any stations for commodity modifiers
+    for _,each in ipairs(system.planets or {}) do
+        if each.station then
+            _exploreHelper.injectAttachToken({name = each.name, tokenName = each.stationTokenName or (each.name.." Token")})
+            _factionHelper.injectCommodityModifier({name = each.name, value = type(each.station) == "number" and each.station or 1})
+        end
+    end
+end
+
+--Create a card or object that can be spent as resources or influence
+---@param params.name string : Name should match the card object's name
+---@param params.resources number? : The resource value
+---@param params.influence number? : The influence value
+---@param params.get table? : A CallData table that points to a function that returns the resource and influence value
+    --CallData table: {guid = 'guid of the script object that owns your function', func = 'function name to call'}
+    --Your function will recieve the object reference of the card object as the only param. Return 2 values (influence, resources)
+function injectResourceInfluenceModifier(params)
+    assert(type(params.name) == 'string', 'bad name')
+    assert((not params.resource) or type(params.resource) == 'number', 'bad resource')
+    assert((not params.influence) or type(params.influence) == 'number' , 'bad influence')
+    
+    local mod = copyTable(params)
+    if mod.get then
+        assert(mod.get.guid and type(mod.get.guid) == "string", 'Invalid CallData table for '..mod.name..': non-string guid')
+        assert(mod.get.func and type(mod.get.func) == "string", "Invalid CallData table for "..mod.name..": non-string .func")
+        mod.callData = mod.get
+        mod.get = function(card)
+            local script = mod.callData.obj ~= nil and mod.callData.obj or getObjectFromGUID(mod.callData.guid)
+            if not script then return 0,0 end
+            mod.callData.obj = script
+            assert(script.getVar(mod.callData.func), script.getName().." does not have a global function called: "..mod.callData.func)
+            local i,r = script.call(mod.callData.func, card)
+            return i or 0, r or 0
+        end
+    end
+    
+    for i, entry in ipairs(_nonPlanetResourceInfluenceCards) do
+        if entry.name == mod.name then
+            _nonPlanetResourceInfluenceCards[i] = mod
+            return
+        end
+    end
+    table.insert(_nonPlanetResourceInfluenceCards, mod)
+end
+
+--Create an object that resolves some effect when dropped into a system (like Diplo/Activation tokens)
+---@param params.name string : Name should match the physical object
+---@param params.requireTurn boolean? : Does the dropping player need to be the active player? *defaults false
+---@param params.returnInfo table? : Optional table for defining where the token returns to {position = {}, parent = "guid"|"ObjName"|objRef}
+---@param params.onDrop table : Funtions that will run when the object is dropped: array of strings and CallData tables. *details below
+---Available strings for onDrop are "ACTIVATE" and "DIPLO", all other values must be a CallData table *defined below
+---@param params.onConsume table : What happens after the effect is resolved : array of strings and CallData tables. *details below
+---Available strings for onConsume are "ANIMATE" and "RETURN", all other values must be a CallData table *defined below
+---onDrop and onConsume resolves each function in the order they are listed in the array; these functions can be coroutines spanning multiple frames
+    --To pass your own function, insert a CallData table into the array
+    --CallData table: {func = "nameOfYourFunc", guid = "scriptOwnerGUID"}
+    --param: Your functions will recieve the following table: {color = "WhoDroppedTheToken", obj = tokenObjReference, system}
+    --return: If you return anything other than a thread, the process will imediately call the next func
+        --for advanced async functions(perhaps multi-frame animation) return a thread
+        --When the thread(coroutine) ends, that tells the process that your func is done.
+        --Use the following return line in your function where "isDone" is defined in your coroutine and is set to true when completed
+        --return coroutine.create(function() while not isDone do coroutine.yield() end return end)
+function injectSystemDroppable(params)
+    assert(params, "Missing params to injectSystemDroppable")
+    assert(type(params.name) == "string", "injectSystemDroppable() requires a 'string' params.name field")
+    local newDrop = {
+        requireTurn = params.requireTurn,
+        returnInfo = params.returnInfo,
+        onDrop = {},
+        onConsume = {}
+    }
+
+    --Wrap drop/consume function calls
+    local function newCall(callData, callStep)
+        assert(type(callData) == "table", "Invalid type provided to injectSystemDroppable."..callStep..": "..type(callData))
+        local prefix = "Invalid CallaData table provided to injectSystemDroppable."..callStep..": "
+        assert(type(callData.func) == "string", prefix.."CallData.func must be the string name of your function")
+        assert(type(callData.guid) == "string", prefix.."CallData.guid must be the string guid of your script object")
+        local func, guid, callObj = callData.func, callData.guid, getObjectFromGUID(callData.guid)
+        return function(color, system, obj)
+            if callObj == nil then callObj = getObjectFromGUID(guid) end
+            if callObj == nil or not callObj.getVar(func) then return end
+
+            local result = callObj.call(func, {obj = obj, color = color, system = system})
+            if result and type(result) == "thread" then
+                local timeout = Time.time
+                local status = coroutine.status(result)
+                while status ~= "dead" and Time.time - timeout < 60 do
+                    if status == "suspended" then
+                        coroutine.resume(result)
+                        status = coroutine.status(result)
+                    end
+                    coroutine.yield()
+                end
+            end
+        end
+    end
+
+    local DropOptions = {ACTIVATE = _activateSystem, DIPLO = _diploSystem}
+    for _,each in ipairs(params.onDrop or {}) do
+        if type(each) == "string" then
+            assert(DropOptions[each], "Unsupported preset in injectSystemDroppable.onDrop: "..each)
+            table.insert(newDrop.onDrop, DropOptions[each])
+        else
+            table.insert(newDrop.onDrop, newCall(each, "onDrop"))
+        end
+    end
+
+    local ConsumeOptions = {ANIMATE = DropUtils.animate, RETURN = DropUtils.returnComponent}
+    for _,each in ipairs(params.onConsume or {}) do
+        if type(each) == "string" then
+            assert(ConsumeOptions[each], "Unsupported preset in injectSystemDroppable.onConsume: "..each)
+            table.insert(newDrop.onConsume, ConsumeOptions[each])
+        else
+            table.insert(newDrop.onConsume, newCall(each, "onConsume"))
+        end
+    end
+
+    _systemDroppables[params.name] = newDrop
 end
 
 -------------------------------------------------------------------------------
@@ -2145,13 +2337,13 @@ end
 function onClickActivateSystem(clickerColor, systemObject)
     assert(type(clickerColor) == 'string' and type(systemObject) == 'userdata')
     local system = systemFromGuid(systemObject.getGUID())
-    -- No need to announce, activateSystem will do that.
+    -- No need to announce, _activateSystem will do that.
     if (not Turns.enable) or Turns.turn_color ~= clickerColor then
         printToColor('Activate system: ' .. clickerColor .. ' is not the active player, ignoring', clickerColor, 'Red')
         return
     end
     if _moveTokenFromCommandSheet(systemObject, clickerColor, 'tactics') then
-        activateSystem(clickerColor, system)
+        _activateSystem(clickerColor, system)
     end
 end
 
@@ -2231,11 +2423,18 @@ function onPlayerTurnEnd(player_color_end, player_color_next)
 end
 
 function onObjectDrop(playerColor, object)
+    local name = object.getName()
+    if _systemDroppables[name] then
+        DropUtils.onDrop(playerColor, object, name)
+    end
+    --No else here, allow injected effects to use command tokens
+
+    --Is it a command token?
     if playerColor ~= Turns.turn_color then
         return
     end
 
-    local tokenName = string.match(object.getName(), '^(.*) Command Token')
+    local tokenName = string.match(name, '^(.*) Command Token')
     if not tokenName then
         return
     end
@@ -2253,10 +2452,23 @@ function onObjectDrop(playerColor, object)
         return
     end
 
-    activateSystem(playerColor, system)
+    _activateSystem(playerColor, system)
 end
 
-function activateSystem(playerColor, system)
+--Activate from other scripts
+function activateSystem(params)
+    assert(params, "Missing params for call to TI4_SYSTEM_HELPER.acitvateSystem()")
+    local prefix = "Invalid params for TI4_SYSTEM_HELPER.acitvateSystem(): "
+    assert(type(params) == "table", prefix.."params should be a table with .color and .guid or .position fields")
+    assert(type(params.color) == "string",prefix.."params.color needs to be a string.")
+    assert(type(params.guid) == "string" or type(params.position) == "table", prefix.."params requires a .guid or .position field")
+    local system = params.guid and _systems[params.guid] or params.position and systemFromPosition(params.position)
+    if not system then return end
+
+    _activateSystem(params.color, system)
+end
+
+function _activateSystem(playerColor, system)
     assert(type(playerColor) == 'string' and type(system) == 'table')
 
     _fillMissingSystemData(system.guid, system)
@@ -2282,6 +2494,85 @@ function activateSystem(playerColor, system)
         -- Since that is happening, also spread out over N frames.
         Wait.frames(function() object.call('onSystemActivation', system) end, i)
     end
+end
+
+function diploSystem(params)
+    assert(params, "Missing params for call to TI4_SYSTEM_HELPER.diploSystem()")
+    local prefix = "Invalid params for TI4_SYSTEM_HELPER.diploSystem(): "
+    assert(type(params) == "table", prefix.."params should be a table with .color and .guid or .position fields")
+    assert(type(params.color) == "string",prefix.."params.color needs to be a string.")
+    assert(type(params.guid) == "string" or type(params.position) == "table", prefix.."params requires a .guid or .position field")
+    local system = params.guid and _systems[params.guid] or params.position and systemFromPosition(params.position)
+    if not system then return end
+
+    _diploSystem(params.color, system)
+end
+
+function _diploSystem(playerColor, system)
+    assert(playerColor and type(playerColor) == "string")
+    assert(system)
+
+    local colors = {}
+    for _, faction in pairs(_factionHelper.allFactions()) do
+        if faction.color ~= playerColor then
+            table.insert(colors, faction.color)
+        end
+    end
+    _moveTokenFromReinforcements(getObjectFromGUID(system.guid), colors)
+end
+
+--Mahact Prommisory Note
+function _scepterDiplo(usingPlayer, system)
+    local function getFleetTokens(commandSheet)
+        assert(commandSheet, "Missing sheet")
+        if not commandSheet then return {} end
+
+        local tokenHash = {}
+        local tokens = {}
+        local pattern = " Command Token"
+        for _,each in ipairs(getAllObjects()) do
+            if string.match(each.getName(), pattern) then
+                table.insert(tokens, each)
+            end
+        end
+
+        local bounds = commandSheet.getBoundsNormalized()
+        local pos = commandSheet.getPosition()
+        local rad = math.max(bounds.size.x, bounds.size.z) + 1
+        for _,token in ipairs(tokens) do
+            local name = token.getName()
+            if not tokenHash[name] then
+                local tPos = token.getPosition()
+                if tPos.x < pos.x+rad and tPos.x > pos.x-rad and tPos.z > pos.z-rad and tPos.z < pos.z+rad then
+                    tokenHash[name] = true
+                end
+            end
+        end
+
+        return tokenHash
+    end
+
+    local fleetHash = {}
+    for _,each in pairs(_factionHelper.allFactions() or {}) do
+        for _,proms in ipairs(each.promissoryNotes or {}) do
+            if proms == 'Scepter of Dominion' then
+                if not each.color or each.color == usingPlayer then return end --Players can't use their own notes
+                fleetHash = getFleetTokens(getObjectFromGUID(each.commandSheetGuid))
+                break
+            end
+        end
+    end
+    
+    --convert token names to colors
+    local colors = {}
+    for each,_ in pairs(fleetHash) do
+        local faction = _factionHelper.fromTokenName(each)
+        if faction and faction.color and faction.color ~= usingPlayer then
+            table.insert(colors, faction.color)
+        end
+    end
+
+    _moveTokenFromReinforcements(getObjectFromGUID(system.guid), colors)
 end
 
 -------------------------------------------------------------------------------
@@ -2336,6 +2627,10 @@ function _renameSystemTilesCoroutine()
     return 1
 end
 
+--[[
+--Commented out to enabled DropUtils to create coroutines at runtime
+--Comment back in to test code (Drop Tokens like the Diplo Token will error)
+
 -------------------------------------------------------------------------------
 -- Index is only called when the key does not already exist.
 local _lockGlobalsMetaTable = {}
@@ -2346,3 +2641,4 @@ function _lockGlobalsMetaTable.__newindex(table, key, value)
     error('Globals are locked, cannot create global variable "' .. tostring(key or '<nil>') .. '"', 2)
 end
 setmetatable(_G, _lockGlobalsMetaTable)
+--]]
