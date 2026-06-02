@@ -202,7 +202,7 @@ local SetupFranken = {}
 local SetupCards = {}
 
 local _setupTime = false  -- use os.time() for a durable epoch-based timestamp, Time.time resets on TTS load
-local _includePoK, _includeTE, _includeTF = false, false, false
+local _includePoK = false
 local _gamePoints = 10
 
 local _putPendingGuidSet = {}
@@ -214,17 +214,9 @@ function setPoK(value)
     _includePoK = value
 end
 
-function setTE(toState)
-    _includeTE = toState and true or false
+function getPoK()
+    return _includePoK
 end
-
-function setTF(toState)
-    _includeTF = toState and true or false
-end
-
-function getPoK() return _includePoK end
-function getTE() return _includeTE end
-function getTF() return _includeTF end
 
 function setGamePoints(value)
     assert(type(value) == 'number')
@@ -1182,8 +1174,6 @@ function setup(params)
 
     _setupTime = os.time()
     setPoK(params.includePoK or false)
-    setTF(params.includeTF or false)
-    setTE(params.includeTE or false)
     setGamePoints(params.gamePoints or 10)
 
     table.insert(_setupQueue, params)
@@ -2695,8 +2685,6 @@ function onLoad(saveState)
     if saveState then
         _setupTime = saveState._setupTime
         _includePoK = saveState._includePoK
-        _includeTE = saveState._includeTE
-        _includeTF = saveState._includeTF
         _gamePoints = saveState._gamePoints
     end
 
@@ -2716,8 +2704,6 @@ function onSave()
     return JSON.encode({
         _setupTime = _setupTime,
         _includePoK = _includePoK,
-        _includeTE = _includeTE,
-        _includrTF = _includeTF,
         _gamePoints = _gamePoints,
     })
 end

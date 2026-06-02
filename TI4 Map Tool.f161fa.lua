@@ -44,7 +44,6 @@ local _buttonHelper = getHelperClient('TI4_BUTTON_HELPER')
 local _deckHelper = getHelperClient('TI4_DECK_HELPER')
 local _exploreHelper = getHelperClient('TI4_EXPLORE_HELPER')
 local _factionHelper = getHelperClient('TI4_FACTION_HELPER')
-local _setupHelper = getHelperClient('TI4_SETUP_HELPER')
 local _systemHelper = getHelperClient('TI4_SYSTEM_HELPER')
 local _zoneHelper = getHelperClient('TI4_ZONE_HELPER')
 
@@ -64,7 +63,6 @@ local GREEN_BAG_GUID = 'c94fbe'
 local FRACTURE_BAG_GUID = '524204'
 local HYPERLANE_BAG_GUID = '60444a'
 local REX_BAG_GUID = 'ef04ca' --The Setup bag
-local POK_BAG_GUID, TE_BAG_GUID = '5ae03c', 'db288e'
 
 local SYSTEM_BAG_GUIDS = {
     RED_BAG_GUID,
@@ -73,8 +71,6 @@ local SYSTEM_BAG_GUIDS = {
     GREEN_BAG_GUID,
     FRACTURE_BAG_GUID,
     REX_BAG_GUID,
-    POK_BAG_GUID,--Lets us build pre-made maps even when PoK or TE are not checked during settup (Tiles are moved into these containers)
-    TE_BAG_GUID,
     "a9f343",  -- Hybrid Franken hexes
     "223e51",  -- Alister systems
     "f69885",  -- Pick-a-planet
@@ -82,7 +78,6 @@ local SYSTEM_BAG_GUIDS = {
 }
 
 local _mapString = false
-local _autoClearCards = false
 
 -- Remember which tiles got cloned for repeated map string entries.
 local _tileClonesGuidSet = {}
@@ -552,51 +547,6 @@ function placeTilesCoroutine()
         tileToSystem[system.tile] = system
     end
 
-    --Check if this map uses PoK/TE tiles when Pok/TE were not checked during settup (we will need to return planet cards to the deck)
-    local _sourcesToCheck, _sourcesToReturn = {}, {}
-    if not _setupHelper.getPoK() then _sourcesToCheck.PoK = true end
-    if not _setupHelper.getTE() then _sourcesToCheck.TE = true end
-    if next(_sourcesToCheck) then
-        for i,each in ipairs(buildList) do
-            local source = (tileToSystem[each.tile] or {}).source or "base"
-            if _sourcesToCheck[source] then
-                _sourcesToCheck[source] = nil
-                _sourcesToReturn[source] = true
-                if not next(_sourcesToCheck) then break end
-            end
-        end
-    end
-    if next(_sourcesToReturn) then
-        local _planetsDeck = getObjectFromGUID(_deckHelper.getDeck("Planets") or "")
-        local _legendaryDeck = getObjectFromGUID(_deckHelper.getDeck("Legendary Abilities") or "")
-        for source,_ in pairs(_sourcesToReturn)do
-            local box = getObjectFromGUID(source == 'PoK' and POK_BAG_GUID or TE_BAG_GUID)
-            for i,each in ipairs((box and box.getObjects() or {})) do
-                if each.name == source.." Planets" then
-                    local function onSpawn(obj) if _planetsDeck then _planetsDeck.putObject(obj) else obj.setName("Planets") end end
-                    local pos = _planetsDeck and _planetsDeck.getPosition() or _deckHelper.getDeckTransform("Planets").position
-                    pos.y = pos.y + (i*3)
-                    box.takeObject({
-                        position = pos,
-                        guid = each.guid,
-                        smooth = false,
-                        callback_function = onSpawn
-                    })
-                elseif each.name == source.." Legendary Abilities" then
-                    local function onSpawn(obj) if _legendaryDeck then _legendaryDeck.putObject(obj) else obj.setName("Legendary Abilities")end end
-                    local pos = _legendaryDeck and _legendaryDeck.getPosition() or _deckHelper.getDeckTransform("Legendary Abilities").position
-                    pos.y = pos.y + (i*3)
-                    box.takeObject({
-                        position = pos,
-                        guid = each.guid,
-                        smooth = false,
-                        callback_function = onSpawn
-                    })
-                end
-            end
-        end
-    end
-
     -- Build a map from system guid to container.
     local systemGuidToBag = {}
     for _, bagGuid in ipairs(SYSTEM_BAG_GUIDS) do
@@ -755,14 +705,12 @@ function onButtonClearTiles(_, color)
     startLuaCoroutine(self, 'clearTilesCoroutine')
 end
 
---NOTE: Does not clear fracture systems
+--Does not clear fracture systems
 function clearTilesCoroutine()
     -- Also put away any Frontier and planet cards.
     coroutine.yield(0)
-    if _setupHelper.getPoK() then _exploreHelper.retrieveFrontierTokens() end
-    if _autoClearCards then
-        returnCardsCoroutine()
-    end
+    _exploreHelper.retrieveFrontierTokens()
+    returnCardsCoroutine()
 
     broadcastToAll('Returning tiles')
     local redBag = getObjectFromGUID(RED_BAG_GUID)
@@ -778,15 +726,6 @@ function clearTilesCoroutine()
     if hyperlaneBag == nil then
         broadcastToAll('Cannot find hyperlane tiles bag')
     end
-
-    local pokBag = not _setupHelper.getPoK() and getObjectFromGUID(POK_BAG_GUID) or false
-    local teBag = not _setupHelper.getTE() and getObjectFromGUID(TE_BAG_GUID)
-
-    --- Returns tiles to their expansion box if that expansion is not in use; otherwise returns them to the given target bag
-    local function _putIfUsing(targetBag, system)
-        return system and ((system.source == 'PoK' and pokBag) or (system.source == 'TE' and teBag)) or targetBag
-    end
-
     for system, object in pairs(getPlacedSystemToObject(false)) do
         local guid = object.getGUID()
         if _tileClonesGuidSet[guid] then
@@ -808,12 +747,12 @@ function clearTilesCoroutine()
                     bag = hyperlaneBag
                 elseif system.planets and #system.planets > 0 then
                     if (system.anomalies and #system.anomalies > 0) then
-                        bag = _putIfUsing(redBag, system)
+                        bag = redBag
                     else
-                        bag = _putIfUsing(blueBag, system)
+                        bag = blueBag
                     end
                 else
-                    bag = _putIfUsing(redBag, system)
+                    bag = redBag
                 end
                 if bag then
                     object.setLock(false)
@@ -970,13 +909,11 @@ local function getPlanetNameToCardDeckGuid()
             end
         end
     end
-
     return planetNameToCardOrDeckAndEntryGuid, extras
 end
 
 function placeCardsCoroutine()
     broadcastToAll('Placing planet cards')
-    _autoClearCards = true
 
     -- Find all card locations in a single pass, then place cards.
     local planetNameToCardDeckGuid = getPlanetNameToCardDeckGuid()
@@ -1106,7 +1043,6 @@ end
 
 function returnCardsCoroutine()
     broadcastToAll('Returning planet cards')
-    _autoClearCards = false
 
     local planetNameToCardDeckGuid, extras = getPlanetNameToCardDeckGuid()
     coroutine.yield(0)

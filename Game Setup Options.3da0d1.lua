@@ -344,8 +344,6 @@ function setupGameCoroutine()
         extraRings = effectiveExtraRings,
         gamePoints = _config.gamePoints,
         includePoK = _config.usePoK,
-        includeTE = _config.useTE,
-        includeTF = _config.useTF,
         playerTools = _config.playerTools and not _config.isRightClick,
         gamedataOptIn = _config.gamedataOptIn,
         isRightClick = _config.isRightClick,

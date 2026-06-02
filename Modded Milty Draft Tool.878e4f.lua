@@ -2,7 +2,6 @@
 -- Authors: Milty, SCPT Matt
 -- Script: Darrell
 -- Wormhole logic and tier tweaks: DangerousGoods
--- System tier auto-assign: SomethingsBrewing
 -- #include <~/TI4-TTS/TI4/DraftTools/MiltyDraft>
 --
 -- Layout:
@@ -179,7 +178,6 @@ function onLoad(saveState)
     end
     _state.numSlices = _state.numSlices or _config.DEFAULT_SLICES
     _state.numFactions = _state.numFactions or _config.DEFAULT_FACTIONS
-    _state.usePurples = false --Experimental setting, not currently saved
 
     self.clearButtons()
     for i, button in ipairs(BUTTONS) do
@@ -251,12 +249,6 @@ function onLoad(saveState)
         })
     end
     self.addContextMenuItem('Look at me', lookAtMe)
-    --Temporarilly adding the purple tile option to the context menu
-    self.addContextMenuItem('Toggle Red-planets', function()
-        _state.usePurples = not _state.usePurples
-        local var = _state.usePurples and "now" or "not"
-        printToAll("The value of planets in Red-backed tiles will "..var.." be accounted for.", _state.usePurples and "Green" or "Red")
-    end)
 
     self.addContextMenuItem('Input slices', CustomSetup.toggleInput)
 
@@ -426,9 +418,6 @@ function setupCoroutine()
 
     DraftSelectionMats.stow()
     coroutine.yield(0)
-
-    --Update which tiles to use: Only tiles in the Red/Blue bags (Homebrew tiles are assigned a tier)
-    AutoTier.buildTiers(_state.usePurples)
 
     -- Get 3 "balanced" blue tiles and 2 red ones.
     local slices = false
@@ -1043,7 +1032,7 @@ VolverMilty = {
 
     -- DangerousGoods:
     -- Tiers based on a bag draft system I was working on, Basic premise is the
-    -- first tier is systems with 2 or more planets and no tech skips (or stations). Second
+    -- first tier is systems with 2 or more planets and no tech skips. Second
     -- tier are the systems with 2 or more planets with tech skips and the
     -- legendaries, and Atlas / Lodor. Third tier is the single planet systems
     -- + Quann.  These tiers are more likely to cause slices that don't meet
@@ -1067,177 +1056,6 @@ VolverMilty = {
     -- Current hand state initialized via _reset().
 }
 
---Only tiles in the Red and Blue bags will be included in the milty
---Homebrew tiles will automatically have their tiers assigned
-AutoTier = {
-    purpleTiles = false, --Setting where red-backed tiles with planets are treated as blue-backed systems and thus calculated
-    baseTier1 = copyTable(VolverMilty.tier1),
-    baseTier2 = copyTable(VolverMilty.tier2),
-    baseTier3 = copyTable(VolverMilty.tier3),
-    reds = {},--Which reds are available
-    assignmentCache = {}, --[tile guid] to tier # (Blues only)
-    blueBagGUID = "da323e",
-    redBagGUID = "a22bfb",
-}
-
-function AutoTier.buildTiers(usePurpleTiles)
-    local systems = assert(_systemHelper.systems())
-    local t1,t2,t3,included,reds = {},{},{},{},{}
-
-    --Read the system guids in the Red and Blue bags; only these tiles will be draftable.
-    local redBag = getObjectFromGUID(AutoTier.redBagGUID)
-    local blueBag = getObjectFromGUID(AutoTier.blueBagGUID)
-
-    if not redBag and not blueBag then
-        included = copyTable(diploSystem)
-        print("WARNING: Red and Blue System tile bags (", AutoTier.redBagGUID,", ",AutoTier.blueBagGUID,") could not be found. If the objects exist, update their guids in the Milty Tool's AutoTier")
-    else
-        --We won't assume that ALL tiles in the blue bag are actually blue and same for Reds, tile types will be verified before assignment
-        if blueBag then
-            for _,each in ipairs(blueBag.getObjects() or {}) do
-                included[each.guid] = true
-            end
-        else
-            print("WARNING: Blue System tile bag (", AutoTier.blueBagGUID,") could not be found. If the object exists, update the guid in the Milty Tool's AutoTier")
-        end
-        if redBag then
-            for _,each in ipairs(redBag.getObjects() or {}) do
-                included[each.guid] = true
-            end
-            AutoTier.reds = {}
-        else
-            AutoTier.reds = nil
-            print("WARNING: Red System tile bag (", AutoTier.redBagGUID,") could not be found. If the object exists, update the guid in the Milty Tool's AutoTier")
-        end
-    end
-
-    --Assign to tier
-    local cacheMap = {t1,t2,t3}
-    local function assignTier(system)
-        if AutoTier.assignmentCache[system.tile] then
-            return table.insert(cacheMap[AutoTier.assignmentCache[system.tile]], system.tile)
-        end
-        if system.miltyTier and type(system.miltyTier) == "number" and system.miltyTier <=3 and system.miltyTier > 0 then
-            AutoTier.assignmentCache[system.tile] = system.miltyTier
-            return table.insert(cacheMap[system.miltyTier], system.miltyTier)
-        end
-        --else
-            
-        local pCount = system.planets and type(system.planets) == "table" and #system.planets or 0
-        if pCount < 1 then
-            --print("Tried to assign a tier to a planet-less system: ", system.tile)
-            return
-        end
-
-        for _,eachPlanet in ipairs(system.planets) do
-            if eachPlanet.legendary then
-                AutoTier.assignmentCache[system.tile] = 2
-                return table.insert(t2, system.tile)
-            elseif eachPlanet.station or eachPlanet.tech then
-                if #system.planets == 1 then
-                    AutoTier.assignmentCache[system.tile] = 3
-                    return table.insert(t3, system.tile)
-                else
-                    AutoTier.assignmentCache[system.tile] = 2
-                    return table.insert(t2, system.tile)
-                end 
-            end
-        end
-        --else
-        if pCount == 1 then
-            if system.wormholes and next(system.wormholes) then
-                local highVal = math.max(system.planets[1].resources or 0, system.planets[1].influence or 0)
-                if highVal > 2 then
-                    AutoTier.assignmentCache[system.tile] = 2
-                    return table.insert(t2, system.tile)
-                end
-            end
-            AutoTier.assignmentCache[system.tile] = 3
-            return table.insert(t3, system.tile)
-        else
-            AutoTier.assignmentCache[system.tile] = 1
-            return table.insert(t1, system.tile)
-        end
-    end
-
-    local _reds = SystemTiles.getRedTiles()
-    local reds = {} for _,each in ipairs(_reds or {}) do reds[each] = true end
-    for each,_ in pairs(included) do
-        --Verify tile types so no misc items in the bags (like misplaced hyperlanes) are included
-        if systems[each] then
-            if reds[systems[each].tile] then
-                if usePurpleTiles and systems[each].planets and #systems[each].planets > 0 then
-                    assignTier(systems[each])
-                elseif AutoTier.reds then --Save which reds are actually available
-                    table.insert(AutoTier.reds, systems[each].tile)
-                end
-            elseif systems[each].planets and not (systems[each].home or systems[each].hyperlane or systems[each].faction or systems[each].fracture) then
-                assignTier(systems[each])
-            else print("An invalid tile was in a Red or Blue bag: guid:", each,", tile:",systems[each].tile)
-            end
-
-        end
-    end
-
-
-    VolverMilty.tier1 = t1
-    VolverMilty.tier2 = t2
-    VolverMilty.tier3 = t3
-    
-    --[[Verify that tiles match previous assignments (tiles 108, 106, and 98 were manually assigned incorrectly bassed on the tier descriptions)
-    local baseHash,resultHash = {},{}
-    for _,each in ipairs(AutoTier.baseTier1) do baseHash[each] = 1 end
-    for _,each in ipairs(AutoTier.baseTier2) do baseHash[each] = 2 end
-    for _,each in ipairs(AutoTier.baseTier3) do baseHash[each] = 3 end
-
-    for _,each in ipairs(t1) do resultHash[each] = 1 end
-    for _,each in ipairs(t2) do resultHash[each] = 2 end
-    for _,each in ipairs(t3) do resultHash[each] = 3 end
-
-    local misMatch,missing = {},{}
-    for each,tier in pairs(baseHash) do
-        if not resultHash[each] then
-            missing[each] = tier
-        elseif resultHash[each] ~= tier then
-            misMatch[each] = {tier, resultHash[each]}
-        end
-        resultHash[each] = nil --Remove so we can see if any extra systems remain
-    end
-
-    if next(missing) then
-        local printT = {}
-        for tile, tier in pairs(missing) do
-            table.insert(printT, (tile..":"..tostring(tier)))
-        end
-        table.sort(printT, function(a,b) return tonumber(string.match(a, "%d+")) > tonumber(string.match(b, "%d+"))end)
-        print("______")
-        print(#printT," missing systems:")
-        print(table.concat(printT,", "))
-    end
-    if next(misMatch) then
-        local printT = {}
-        for tile, info in pairs(misMatch) do
-            table.insert(printT, (tile..":["..info[1]..":"..info[2].."]"))
-        end
-        table.sort(printT, function(a,b) return tonumber(string.match(a, "%d+")) > tonumber(string.match(b, "%d+"))end)
-        print("______")
-        print(#printT," mis-matched systems: (tile:[expected : result])")
-        print(table.concat(printT,", "))
-    end
-    if next(resultHash) then
-        local printT = {}
-        for tile,tier in pairs(resultHash) do
-            table.insert(printT, tile..":"..tier)
-        end
-        table.sort(printT, function(a,b) return tonumber(string.match(a, "%d+")) > tonumber(string.match(b, "%d+"))end)
-        print("______")
-        print(#printT," extra systems:")
-        print(table.concat(printT,", "))
-    end
-    print("Results evaluated.")
-    --]]
-end
-
 function VolverMilty._reset()
     VolverMilty.numAlpha = -1
     VolverMilty.numAlphaRed = -1
@@ -1253,11 +1071,10 @@ end
 
 function VolverMilty.permute(list)
     assert(type(list) == 'table')
-    local shuffled,count = {},0
+    local shuffled = {}
     for i, v in ipairs(list) do
-        local j = math.random(1, count + 1)
+        local j = math.random(1, #shuffled + 1)
         table.insert(shuffled, j, v)
-        count = count + 1
     end
     return shuffled
 end
@@ -1488,7 +1305,7 @@ function VolverMilty._weighHand(tileTable)
 end
 
 function VolverMilty.addRedTiles(hands, count)
-    local redTiles = AutoTier.reds or SystemTiles.getRedTiles()
+    local redTiles = SystemTiles.getRedTiles()
     redTiles = VolverMilty.permute(redTiles)
     local wormholesAlpha = {}
     local wormholesBeta = {}
@@ -1516,7 +1333,7 @@ function VolverMilty.addRedTiles(hands, count)
             wormholesBeta[i] = false
             table.insert(betaLess, i)
         end
-        if VolverMilty.find(26, hand) or VolverMilty.find(102, hand) then
+        if VolverMilty.find(26, hand) then
             wormholesAlpha[i] = true
             anyWH = true
         else
@@ -2074,22 +1891,29 @@ function SystemTiles.getRedTiles()
     local result = {}
     for _, system in pairs(_systemHelper.systems()) do
         local isRedTile = false
-        isRedTile = (system.anomalies and #system.anomalies > 0)
+        isRedTile = isRedTile or (system.anomalies and #system.anomalies > 0)
         isRedTile = isRedTile or (not system.planets) or (#system.planets == 0)
-        if not isRedTile and system.planets then
-            local onlyStations = true
-            for _,each in ipairs(system.planets or {}) do
-                if not each.station then onlyStations = false break end
-            end
-            isRedTile = onlyStations
-        end
-        
-        if system.tile > 2000 and system.tile < 2036 then --Pick a planet systems
-            isRedTile = false
-        elseif system.hyperlane or system.fracture or system.home or system.faction or system.offMap then
+		if system.tile > 118 and system.tile < 4252 then
+			isRedTile = false
+		end
+        if system.tile > 91 and system.tile < 113 then
             isRedTile = false
         end
-
+		if system.tile > 4260 then
+			isRedTile = false
+		end
+        if system.tile > 51 and not isPoK then
+            isRedTile = false
+        end
+        if system.hyperlane then
+            isRedTile = false
+        end
+        if system.home then
+            isRedTile = false
+        end
+        if system.tile == 81 then
+            isRedTile = false  -- Muaat supernova
+        end
         if isRedTile then
             table.insert(result, system.tile)
         end
