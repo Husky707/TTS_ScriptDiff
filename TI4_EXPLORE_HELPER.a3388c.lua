@@ -1101,7 +1101,8 @@ function placeFrontierTokens()
 end
 
 function retrieveFrontierTokens()
-    local frontierTokenBag = assert(_getByName('Frontier Tokens Bag'))
+    local frontierTokenBag = _getByName('Frontier Tokens Bag')
+    if not frontierTokenBag then return end
 
     -- Grab all frontier tokens, from everywhere.
     for _, object in ipairs(getAllObjects()) do

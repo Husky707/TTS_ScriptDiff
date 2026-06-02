@@ -19,8 +19,8 @@ function initializeGlobalVariables()
     numberOfBlueTiles = 5
     numberOfRedTiles = 3
     
-    useBestSixBlueTiles = true
-    removeWorstBlueTiles = true
+    useBestSixBlueTiles = false
+    removeWorstBlueTiles = false
     includeAllBlueWormHoles = false
     includeAllRedWormHoles = false
 end
@@ -36,7 +36,7 @@ function createButtonUI()
     self.createButton({
         click_function = "setUp",
         function_owner = self,
-        label          = "Create\nBags",
+        label          = "Create\nBag Draft",
         rotation       = {x = 0, y = 0, z = 180}, 
         width          = 1200,
         height         = 800,

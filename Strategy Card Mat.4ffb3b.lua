@@ -171,7 +171,7 @@ function createSnapPoints()
     table.insert(snapPoints,{
         rotation_snap = true,
         position = {-6.33, 0.12, -2.3},
-        rotation = {0, -90, 0}
+        rotation = {0, 27, 0}
     })
     self.setSnapPoints(snapPoints)
 end

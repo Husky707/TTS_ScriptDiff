@@ -223,102 +223,102 @@ local _systems = {
     }},
 
     -- PoK systems.
-    ['2bc02a'] = { tile = 52, home = true, planets = {
+    ['2bc02a'] = { tile = 52, source = 'PoK', home = true, planets = {
         { name = 'Ixth', resources = 3, influence = 5 },
     }},
-    ['811df5'] = { tile = 53, home = true, planets = {
+    ['811df5'] = { tile = 53, source = 'PoK', home = true, planets = {
         { name = 'Arcturus', resources = 4, influence = 4 },
     }},
-    ['8e0645'] = { tile = 54, home = true, planets = {
+    ['8e0645'] = { tile = 54, source = 'PoK', home = true, planets = {
         { name = 'Acheron', resources = 4, influence = 0 },
     }},
-    ['98d4c2'] = { tile = 55, home = true, planets = {
+    ['98d4c2'] = { tile = 55, source = 'PoK', home = true, planets = {
         { name = 'Elysium', resources = 4, influence = 1, radius = 1.5 },
     }},
-    ['110112'] = { tile = 56, home = true, anomalies = { 'nebula' }, planets = {
+    ['110112'] = { tile = 56, source = 'PoK', home = true, anomalies = { 'nebula' }, planets = {
         { name = 'The Dark', resources = 3, influence = 4 },
     }},
-    ['49318b'] = { tile = 57, home = true, planets = {
+    ['49318b'] = { tile = 57, source = 'PoK', home = true, planets = {
         { name = 'Naazir', resources = 2, influence = 1 },
         { name = 'Rokha', resources = 1, influence = 2 },
     }},
-    ['6f20aa'] = { tile = 58, home = true, planets = {
+    ['6f20aa'] = { tile = 58, source = 'PoK', home = true, planets = {
         { name = 'Valk', resources = 2, influence = 0 },
         { name = 'Ylir', resources = 0, influence = 2 },
         { name = 'Avar', resources = 1, influence = 1 },
     }},
-    ['6b5ed1'] = { tile = 59, planets = {
+    ['6b5ed1'] = { tile = 59, source = 'PoK', planets = {
         { name = 'Archon Vail', resources = 1, influence = 3, trait = 'hazardous', tech = 'blue' },
     }},
-    ['0a93a9'] = { tile = 60, planets = {
+    ['0a93a9'] = { tile = 60, source = 'PoK', planets = {
         { name = 'Perimeter', resources = 2, influence = 1, trait = 'industrial' },
     }},
-    ['780b2f'] = { tile = 61, planets = {
+    ['780b2f'] = { tile = 61, source = 'PoK', planets = {
         { name = 'Ang', resources = 2, influence = 0, trait = 'industrial', tech = 'red' },
     }},
-    ['4c1e0a'] = { tile = 62, planets = {
+    ['4c1e0a'] = { tile = 62, source = 'PoK', planets = {
         { name = 'Sem-Lore', resources = 3, influence = 2, trait = 'cultural', tech = 'yellow' },
     }},
-    ['8064e3'] = { tile = 63, planets = {
+    ['8064e3'] = { tile = 63, source = 'PoK', planets = {
         { name = 'Vorhal', resources = 0, influence = 2, trait = 'cultural', tech = 'green' },
     }},
-    ['a28bb1'] = { tile = 64, wormholes = { 'beta' }, planets = {
+    ['a28bb1'] = { tile = 64, source = 'PoK', wormholes = { 'beta' }, planets = {
         { name = 'Atlas', resources = 3, influence = 1, trait = 'hazardous', },
     }},
-    ['b642cd'] = { tile = 65, planets = {
+    ['b642cd'] = { tile = 65, source = 'PoK', planets = {
         { name = 'Primor', resources = 2, influence = 1, trait = 'cultural', radius = 1.5,
          legendary = true, legendaryCard = 'The Atrament' },
     }},
-    ['1154bc'] = { tile = 66, planets = {
+    ['1154bc'] = { tile = 66, source = 'PoK', planets = {
         { name = "Hope's End", resources = 3, influence = 0, trait = 'hazardous', radius = 1.5,
         legendary = true, legendaryCard = 'Imperial Arms Vault' },
     }},
-    ['834e88'] = { tile = 67, anomalies = { 'gravity rift' }, planets = {
+    ['834e88'] = { tile = 67, source = 'PoK', anomalies = { 'gravity rift' }, planets = {
         { name = 'Cormund', resources = 2, influence = 0, trait = 'hazardous', position = { x = 0.45, z = -0.25 } },
     }},
-    ['8bc917'] = { tile = 68, anomalies = { 'nebula' }, planets = {
+    ['8bc917'] = { tile = 68, source = 'PoK', anomalies = { 'nebula' }, planets = {
         { name = 'Everra', resources = 3, influence = 1, trait = 'cultural', position = { x = 0.45, z = -0.25 } },
     }},
-    ['40bc9e'] = { tile = 69, planets = {
+    ['40bc9e'] = { tile = 69, source = 'PoK', planets = {
         { name = 'Accoen', resources = 2, influence = 3, trait = 'industrial' },
         { name = 'Jeol Ir', resources = 2, influence = 3, trait = 'industrial' },
     }},
-    ['0fb4f5'] = { tile = 70, planets = {
+    ['0fb4f5'] = { tile = 70, source = 'PoK', planets = {
         { name = 'Kraag', resources = 2, influence = 1, trait = 'hazardous' },
         { name = 'Siig', resources = 0, influence = 2, trait = 'hazardous' },
     }},
-    ['14a065'] = { tile = 71, planets = {
+    ['14a065'] = { tile = 71, source = 'PoK', planets = {
         { name = "Ba'kal", resources = 3, influence = 2, trait = 'industrial' },
         { name = 'Alio Prima', resources = 1, influence = 1, trait = 'cultural' }
     }},
-    ['c8d135'] = { tile = 72, planets = {
+    ['c8d135'] = { tile = 72, source = 'PoK', planets = {
         { name = 'Lisis', resources = 2, influence = 2, trait = 'industrial' },
         { name = 'Velnor', resources = 2, influence = 1, trait = 'industrial', tech = 'red' },
     }},
-    ['a931d3'] = { tile = 73, planets = {
+    ['a931d3'] = { tile = 73, source = 'PoK', planets = {
         { name = 'Cealdri', resources = 0, influence = 2, trait = 'cultural', tech = 'yellow' },
         { name = 'Xanhact', resources = 0, influence = 1, trait = 'hazardous' }
     }},
-    ['c763de'] = { tile = 74, planets = {
+    ['c763de'] = { tile = 74, source = 'PoK', planets = {
         { name = 'Vega Major', resources = 2, influence = 1, trait = 'cultural' },
         { name = 'Vega Minor', resources = 1, influence = 2, trait = 'cultural', tech = 'blue' },
     }},
-    ['9c6682'] = { tile = 75, planets = {
+    ['9c6682'] = { tile = 75, source = 'PoK', planets = {
         { name = 'Loki', resources = 1, influence = 2, trait = 'cultural' },
         { name = 'Abaddon', resources = 1, influence = 0, trait = 'cultural' },
         { name = 'Ashtroth', resources = 2, influence = 0, trait = 'hazardous' },
     }},
-    ['9a3731'] = { tile = 76, planets = {
+    ['9a3731'] = { tile = 76, source = 'PoK', planets = {
         { name = 'Rigel III', resources = 1, influence = 1, trait = 'industrial', tech = 'green' },
         { name = 'Rigel II', resources = 1, influence = 2, trait = 'industrial' },
         { name = 'Rigel I', resources = 0, influence = 1, trait = 'hazardous' },
     }},
-    ['75bd47'] = { tile = 77 },
-    ['b8dff6'] = { tile = 78 },
-    ['1a6583'] = { tile = 79, anomalies = { 'asteroid field' }, wormholes = { 'alpha' } },
-    ['015a9f'] = { tile = 80, anomalies = { 'supernova' } },
-    ['33c12d'] = { tile = 81, anomalies = { 'supernova' }, faction = 'muaat' },
-    ['82bf35'] = { tile = 82,
+    ['75bd47'] = { tile = 77, source = 'PoK', },
+    ['b8dff6'] = { tile = 78, source = 'PoK', },
+    ['1a6583'] = { tile = 79, source = 'PoK', anomalies = { 'asteroid field' }, wormholes = { 'alpha' } },
+    ['015a9f'] = { tile = 80, source = 'PoK', anomalies = { 'supernova' } },
+    ['33c12d'] = { tile = 81, source = 'PoK', anomalies = { 'supernova' }, faction = 'muaat' },
+    ['82bf35'] = { tile = 82, source = 'PoK',
         wormholes_faceUp = { 'gamma', 'alpha', 'beta' },
         wormholes_faceDown = { 'gamma' },
         offMap = true, planets = {
@@ -331,117 +331,117 @@ local _systems = {
     },
 	
 	----- Thunder's Edge Home Systems
-	['d454a6'] = { tile = 92, home = true, planets = {
+	['d454a6'] = { tile = 92, source = 'TE', home = true, planets = {
         { name = 'Ordinian', resources = 0, influence = 0, legendary = true, legendaryCard = '4X41D "Hyperion" VI' },
 		{ name = 'Revelation', resources = 1, influence = 2, station = true },
     }},
-	['a1d0b3'] = { tile = 93, home = true, planets = {
+	['a1d0b3'] = { tile = 93, source = 'TE', home = true, planets = {
         { name = 'Mez Lo Orz Fei Zsha', resources = 2, influence = 1 },
 		{ name = 'Rep Lo Orz Qet', resources = 1, influence = 3 },
     }},
-	['393cc3'] = { tile = 94, home = true, wormholes = { 'epsilon' } },
+	['393cc3'] = { tile = 94, source = 'TE', home = true, wormholes = { 'epsilon' } },
 	['eb41e6'] = { tile = 95, home = true, planets = {
         { name = 'Ikatena', resources = 4, influence = 4 },
     }},
-	['94c84d'] = { tile = 96, home = true, planets = {
+	['94c84d'] = { tile = 96, source = 'TE', home = true, planets = {
         { name = 'Cronos', resources = 2, influence = 1 },
 		{ name = 'Tallin', resources = 1, influence = 2 },
     }},
 	-----  Thunder's Edge Systems
-    ['58b55e'] = { tile = 97, planets = {
+    ['58b55e'] = { tile = 97, source = 'TE', planets = {
         { name = 'Faunus', resources = 1, influence = 3, trait = 'industrial', tech = 'green', radius = 1.5, legendary = true, legendaryCard = 'Maxis Central Control' },
     }},
-    ['620587'] = { tile = 98, planets = {
+    ['620587'] = { tile = 98, source = 'TE', planets = {
         { name = 'Garbozia', resources = 2, influence = 1, trait = 'hazardous', radius = 1.5, legendary = true, legendaryCard = "Dok 'N Pic's Salvage Yard" },
     }},
-    ['0c56eb'] = { tile = 99, planets = {
+    ['0c56eb'] = { tile = 99, source = 'TE', planets = {
         { name = 'Emelpar', resources = 0, influence = 2, trait = 'cultural', radius = 1.5, legendary = true, legendaryCard = 'The Acropolis' },
     }},
-    ['468490'] = { tile = 100, planets = {
+    ['468490'] = { tile = 100, source = 'TE', planets = {
         { name = "Tempesta", resources = 1, influence = 1, trait = 'hazardous', tech = 'blue', radius = 1.5, legendary = true, legendaryCard = 'Ionian Fuel Refinery' },
     }},
-    ['9c3347'] = { tile = 101, planets = {
+    ['9c3347'] = { tile = 101, source = 'TE', planets = {
         { name = 'Olergodt', resources = 2, influence = 1, trait = {'cultural', 'hazardous'}, tech = 'yellow' },
     }},
-    ['783d69'] = { tile = 102, wormholes = { 'alpha' }, planets = {
+    ['783d69'] = { tile = 102, source = 'TE', wormholes = { 'alpha' }, planets = {
         { name = 'Andeara', resources = 1, influence = 1, trait = 'industrial', tech = 'blue' },
     }},
-	['e4baf0'] = { tile = 103, planets = {
+	['e4baf0'] = { tile = 103, source = 'TE', planets = {
         { name = 'Vira Pics III', resources = 2, influence = 3, trait = {'hazardous','cultural'} },
     }},
-	['1f2ded'] = { tile = 104, planets = {
+	['1f2ded'] = { tile = 104, source = 'TE', planets = {
         { name = 'Lesab', resources = 2, influence = 1, trait = {'industrial', 'hazardous'} },
     }},
-    ['5ac3db'] = { tile = 105, planets = {
+    ['5ac3db'] = { tile = 105, source = 'TE', planets = {
         { name = 'New Terra', resources = 1, influence = 1, trait = 'industrial', tech = 'green' },
         { name = 'Tinnes', resources = 2, influence = 1, trait = {'industrial', 'hazardous'}, tech = 'green' },
     }},
-    ['441dd0'] = { tile = 106, planets = {
+    ['441dd0'] = { tile = 106, source = 'TE', planets = {
         { name = 'Cresius', resources = 0, influence = 1 , trait = 'hazardous' },
         { name = 'Lazul Rex', resources = 2, influence = 2, trait = {'cultural', 'industrial'} },
     }},
-    ['6bd06b'] = { tile = 107, planets = {
+    ['6bd06b'] = { tile = 107, source = 'TE', planets = {
         { name = 'Tiamat', resources = 1, influence = 2, trait = 'cultural', tech = 'yellow' },
         { name = 'Hercalor', resources = 1, influence = 0, trait = 'industrial' },
     }},
-    ['2b9dde'] = { tile = 108, planets = {
+    ['2b9dde'] = { tile = 108, source = 'TE', planets = {
         { name = 'Kostboth', resources = 0, influence = 1, trait = 'cultural' },
         { name = 'Capha', resources = 3, influence = 0, trait = 'hazardous' },
     }},
-    ['8a71d9'] = { tile = 109, planets = {
+    ['8a71d9'] = { tile = 109, source = 'TE', planets = {
         { name = 'Bellatrix', resources = 1, influence = 2, trait = 'cultural' },
         { name = 'Tsion Station', resources = 1, influence = 1, station = true },
     }},
-    ['edc1e5'] = { tile = 110, planets = {
+    ['edc1e5'] = { tile = 110, source = 'TE', planets = {
         { name = 'Elnath', resources = 2, influence = 0, trait = 'hazardous' },
         { name = 'Horizon', resources = 1, influence = 2, trait = 'cultural' },
         { name = 'Luthien VI', resources = 3, influence = 1, trait = 'hazardous' },
     }},
-	['a2b6ba'] = { tile = 111, planets = {
+	['a2b6ba'] = { tile = 111, source = 'TE', planets = {
         { name = 'Tarana', resources = 1, influence = 2, trait = {'cultural', 'industrial'} },
         { name = 'Oluz Station', resources = 1, influence = 1, station = true },
     }},
-	['71a41f'] = { tile = 112, planets = {
+	['71a41f'] = { tile = 112, source = 'TE', planets = {
         { name = 'Mecatol Rex', resources = 1, influence = 6, radius = 1.7, legendary = true, legendaryCard = 'The Galactic Council' }, 
 	}},
-    ['1684ac'] = { tile = 113, anomalies = { 'gravity rift' }, wormholes = { 'beta' } },
-    ['82db8b'] = { tile = 114, anomalies = { 'entropic scar' } },
-    ['4d99d0'] = { tile = 115, anomalies = { 'astroid field' }, planets = {
+    ['1684ac'] = { tile = 113, source = 'TE', anomalies = { 'gravity rift' }, wormholes = { 'beta' } },
+    ['82db8b'] = { tile = 114, source = 'TE', anomalies = { 'entropic scar' } },
+    ['4d99d0'] = { tile = 115, source = 'TE', anomalies = { 'astroid field' }, planets = {
         { name = 'Industrex', resources = 2, influence = 0, trait = 'industrial', tech = 'red', legendary = true, legendaryCard = 'Aeurex Mechanica' }
 	}},
-	['2c570b'] = { tile = 116, anomalies = { 'entropic scar' }, planets = {
+	['2c570b'] = { tile = 116, source = 'TE', anomalies = { 'entropic scar' }, planets = {
         { name = 'Lemox', resources = 0, influence = 3, trait = 'industrial' }
 	}},
-	['e1f04c'] = { tile = 117, anomalies = { 'astroid field' , 'gravity rift' }, planets = {
+	['e1f04c'] = { tile = 117, source = 'TE', anomalies = { 'astroid field' , 'gravity rift' }, planets = {
         { name = 'The Watchtower', resources = 1, influence = 1, station = true, position = { x = -.57, z = 0.58 }, radius = .8 }
 	}},
-	['987aa2'] = { tile = 118, home = true, wormholes = { 'epsilon' }, offMap = true, planets = {
+	['987aa2'] = { tile = 118, source = 'TE', home = true, wormholes = { 'epsilon' }, offMap = true, planets = {
 		{ name = 'Ahk Creuxx', resources = 4, influence = 2, position = { x = -0.05, z = -0.4 }, radius = 0.8 }
 	}},
 	----- The Fracture Systems
-	['6e69cb'] = { tile = 901, fracture = true, wormholes = { 'egress' } },
-	['5a91ee'] = { tile = 902, fracture = true, wormholes = { 'egress' } },
-	['1e7722'] = { tile = 903, fracture = true },
-	['bf2378'] = { tile = 904, fracture = true },
-	['ada29d'] = { tile = 905, fracture = true, planets = {
+	['6e69cb'] = { tile = 901, source = 'TE', fracture = true, wormholes = { 'egress' } },
+	['5a91ee'] = { tile = 902, source = 'TE', fracture = true, wormholes = { 'egress' } },
+	['1e7722'] = { tile = 903, source = 'TE', fracture = true },
+	['bf2378'] = { tile = 904, source = 'TE', fracture = true },
+	['ada29d'] = { tile = 905, source = 'TE', fracture = true, planets = {
         { name = 'Styx', resources = 4, influence = 0, radius = 1.5, legendary = true, legendaryCard = 'A Song Like Marrow' },
     }},
-	['d12964'] = { tile = 906, fracture = true, planets = {
+	['d12964'] = { tile = 906, source = 'TE', fracture = true, planets = {
         { name = 'Cocytus', resources = 3, influence = 0 },
     }},
-	['8d90cf'] = { tile = 907, fracture = true, planets = {
+	['8d90cf'] = { tile = 907, source = 'TE', fracture = true, planets = {
         { name = 'Lethe', resources = 0, influence = 2 },
         { name = 'Phlegethon', resources = 1, influence = 2 },
     }},
 	----- Twilight Fall Home Systems
-    ['370d1c'] = { tile = 601, home = true},
-    ['63062b'] = { tile = 602, home = true},
-    ['487e79'] = { tile = 603, home = true},
-    ['98cd74'] = { tile = 604, home = true},
-    ['bc8634'] = { tile = 605, home = true},
-    ['398533'] = { tile = 606, home = true},
-    ['8b81e4'] = { tile = 607, home = true},
-    ['860763'] = { tile = 608, home = true},
+    ['370d1c'] = { tile = 601, source = 'TF', home = true},
+    ['63062b'] = { tile = 602, source = 'TF', home = true},
+    ['487e79'] = { tile = 603, source = 'TF', home = true},
+    ['98cd74'] = { tile = 604, source = 'TF', home = true},
+    ['bc8634'] = { tile = 605, source = 'TF', home = true},
+    ['398533'] = { tile = 606, source = 'TF', home = true},
+    ['8b81e4'] = { tile = 607, source = 'TF', home = true},
+    ['860763'] = { tile = 608, source = 'TF', home = true},
 
     -- Hyperlane tiles
     -- hyperlanes is an array of 6 indices, representing hyperlane connexion. Indices are zero-based (0 to 6)
@@ -510,14 +510,14 @@ local _systems = {
     },
 
     -- Keleres
-    ['d05172'] = { tile = 202, home = true, planets = {
+    ['d05172'] = { tile = 202, source = 'TE', home = true, planets = {
         { name = 'Moll Primus', resources = 4, influence = 1 },
     }},
-    ['feae10'] = { tile = 214, home = true, planets = {
+    ['feae10'] = { tile = 214, source = 'TE', home = true, planets = {
         { name = 'Archon Ren', resources = 2, influence = 3 },
         { name = 'Archon Tau', resources = 1, influence = 1 },
     }},
-    ['badf4c'] = { tile = 258, home = true, planets = {
+    ['badf4c'] = { tile = 258, source = 'TE', home = true, planets = {
         { name = 'Valk', resources = 2, influence = 0 },
         { name = 'Ylir', resources = 0, influence = 2 },
         { name = 'Avar', resources = 1, influence = 1 },
@@ -1546,13 +1546,13 @@ local _systemDroppables = {
     ["Diplomacy Token"] = {
         requireTurn = false,
         onDrop = {function(color,system) _diploSystem(color, system) end},
-        returnInfo = {position = {x=6.43,y = 3, z=-2.47}, parent = "4ffb3b"},
+        returnInfo = {position = {x=6.43,y = 3, z=-2.47}, rotation = {y = -30}, parent = "4ffb3b"},
         onConsume = {DropUtils.animate, function(color, system, obj) DropUtils.returnComponent(color, system, obj) end}
     },
     ["Activation Token"] = {
         requireTurn = false,
         onDrop = {function(color,system) _activateSystem(color,system) end},
-        returnInfo = {position = {x=-6.33,z=-2.3}, parent = "4ffb3b"},
+        returnInfo = {position = {x=-6.33,z=-2.3}, rotation = {y = 27}, parent = "4ffb3b"},
         onConsume = {DropUtils.animate, function(color,system,obj) DropUtils.returnComponent(color,system,obj) end}
     },
     ["Scepter of Dominion"] = {
@@ -1620,11 +1620,20 @@ DropUtils.returnComponent = function(col,system, obj)
         end
     end
     obj.setPosition(pos)
+
+    if(dropData.returnInfo.rotation) then
+        local pRot = parent and parent.getRotation() or {x = 0, y = 0, z = 0}
+        obj.setRotation({
+            x = pRot.x + (dropData.returnInfo.rotation.x or 0),
+            y = pRot.y + (dropData.returnInfo.rotation.y or 0),
+            z = pRot.z + (dropData.returnInfo.rotation.z or 0),
+        })
+    end
 end
 
 --Injection-----------------------------------------------------------------------------
 
---- Let homebrew add custom systems via runtime injection.
+--- Let brew add custom systems via runtime injection.
 -- @param system: system table.
 function injectSystem(system)
     assert(type(system) == 'table')
