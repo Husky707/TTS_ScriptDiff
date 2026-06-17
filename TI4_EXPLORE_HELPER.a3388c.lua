@@ -378,8 +378,8 @@ end
 --- @param params.tokens string|table : The name, or an array of names of the tokens this card will fetch
 --- @param params.drawTokenOnSpawn boolean?
 function injectAttachmentCard(params)
-    assert(params and type(params) == "table", "TI4_EXPLORE_HELPER.injectAttavhmentCard() error: Failed to provide a params table.")
-    assert(params.name, "TI4_EXPLORE_HELPER.injectAttavhmentCard(params) error: Failed to provide a params.name field.")
+    assert(params and type(params) == "table", "TI4_EXPLORE_HELPER.injectAttachmentCard() error: Failed to provide a params table.")
+    assert(params.name, "TI4_EXPLORE_HELPER.injectAttachmentCard(params) error: Failed to provide a params.name field.")
     local entry = { drawTokensOnSpawn = params.drawTokenOnSpawn, pull = {}}
     if params.tokens then
         entry.pull = type(params.tokens) == "string" and {params.tokens} or copyTable(params.tokens)
@@ -1361,7 +1361,7 @@ function AttachLib._injectAttachment(system, planetName, attachTokenObject)
     if attrs.injectFunction then
         local result, attachParent  = attrs.injectFunction(system, planetName, attachTokenObject)
         if result and type(result) == "table" then
-            _systemHelper.injectSystem(result)
+            _systemHelper.modifySystem(result)
             return true, attachParent or getObjectFromGUID(system.guid)
         else
             return false
@@ -1432,7 +1432,7 @@ function AttachLib._injectAttachment(system, planetName, attachTokenObject)
         system._attachments = system._attachments or {}
         system._attachments[attachTokenObject.getGUID()] = copyTable(attrs)
         system = AttachLib._addAnomalies(system, attrs.anomaly)
-        _systemHelper.injectSystem(system)
+        _systemHelper.modifySystem(system)
         return true, _systemObj
     end
     
@@ -1514,7 +1514,7 @@ function AttachLib._injectAttachment(system, planetName, attachTokenObject)
     end
 
     system = AttachLib._addAnomalies(system, attrs.anomaly)
-    _systemHelper.injectSystem(system)
+    _systemHelper.modifySystem(system)
     return true, attachParent or getObjectFromGUID(system.guid)
 end
 
@@ -1531,7 +1531,7 @@ function AttachLib._ejectAttachment(system, planetName, attachTokenObject)
     if attrs.ejectFunction then
         local result = attrs.ejectFunction(system, planetName, attachTokenObject)
         if result then
-            _systemHelper.injectSystem(result)
+            _systemHelper.modifySystem(result)
             return true
         else return false
         end
@@ -1573,7 +1573,7 @@ function AttachLib._ejectAttachment(system, planetName, attachTokenObject)
         end
 
         system = AttachLib._updateAnomalies(system)
-        _systemHelper.injectSystem(system)
+        _systemHelper.modifySystem(system)
         return true
     end
 
@@ -1605,7 +1605,7 @@ function AttachLib._ejectAttachment(system, planetName, attachTokenObject)
     end
 
     system = AttachLib._updateAnomalies(system)
-    _systemHelper.injectSystem(system)
+    _systemHelper.modifySystem(system)
     return true
 end
 
@@ -2157,7 +2157,7 @@ function _stellarConverterTokenDestroyPlanet_coroutine()
     planet.influence = 0
     planet.tech = nil
     planet._attachments = nil
-    _systemHelper.injectSystem(system)
+    _systemHelper.modifySystem(system)
 
     return 1
 end

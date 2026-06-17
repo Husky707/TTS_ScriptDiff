@@ -1633,6 +1633,14 @@ end
 
 --Injection-----------------------------------------------------------------------------
 
+--Previous iterations of the TI4_EXPLORE_HELPER usded injectSystem to modify systems; redirecting those calls here
+--func is error-advers, makes assumptions that the caller is passing a valid system, applies less checks, and does not auto-inject Space Station data
+function modifySystem(system)
+    if not system or not type(system) == "table" or not system.guid then return end
+
+    _systems[system.guid] = copyTable(system)
+end
+
 --- Let brew add custom systems via runtime injection.
 -- @param system: system table.
 function injectSystem(system)
@@ -1658,7 +1666,7 @@ function injectSystem(system)
     --Auto-inject any stations for commodity modifiers
     for _,each in ipairs(system.planets or {}) do
         if each.station then
-            _exploreHelper.injectAttachToken({name = each.name, tokenName = each.stationTokenName or (each.name.." Token")})
+            _exploreHelper.injectAttachmentToken({name = each.stationTokenName or (each.name.." Token"), fetchedBy = each.name})
             _factionHelper.injectCommodityModifier({name = each.name, value = type(each.station) == "number" and each.station or 1})
         end
     end
