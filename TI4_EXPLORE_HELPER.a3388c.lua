@@ -319,6 +319,76 @@ function injectPlanetToken(params)
   end
 end
 
+--- Add an attachment token. Place that token into the 'Exploration Bag' for it to be fetched properly
+--- @param params.name string : The name of the token object
+--- @param params.fetchedBy string|table? : The name or names(array) of cards that will pull this token
+-- The rest of your table will be directly copied into attachTokens without safegaurds, so watch for typos.
+-- - decal (boolean): attach image to planet card?
+-- - noanchor (boolean): if true, does not snap to a position.
+-- - noLock (boolean): if true, the token will not lock
+-- - attachTarget (string): defaults to "PLANET" out of "SYSTEM"|"PLANET_OR_SYSTEM"|"PLANET"
+-- - frontier (boolean): @depricated, use attachTarget - if true, attach to systems without planets.
+-- - getOrientation (table): calls the defined function to determine which way the token should be flipped
+        --{guid = 'string', func = 'nameOfFunction'} -function recieve(tokenObj, planetName, systemTable) and should set token rotation
+--The following can be included in a faceUp/faceDown table, or can be kept as a key in params (used as faceUpOrDown)
+-- - planetToken (table): see injectPlanetToken for param details
+-- - anomaly (table): array of anomaly names
+-- either:
+-- - faceUp = { resources = #, influence = # }
+-- - faceDown = { resources = #, influence = # }
+-- or:
+-- - faceUpOrDown = { resources = #, influence = # }
+function injectAttachmentToken(params)
+    assert(params and type(params) == "table", "TI4_EXPLORE_HELPER.injectAttachmentToken() error: Failed to provide params.")
+    assert(params.name and type(params.name) == "string", "TI4_EXPLORE_HELPER.injectAttachmentToken() error: Failed to provide a params.name field.")
+
+    attachTokens[params.name] = copyTable(params)
+    if params.getOrientation then
+        local errHeader = "ERROR injecting "..params.name.." attachment: "
+        assert(type(params.getOrientation) == "table",errHeader.."params.getOrientation must be a table with defined .guid and .func values.")
+        assert(params.getOrientation.guid and type(params.getOrientation.guid) == "string", errHeader.."getOrientation.guid must be the string guid of your script object")
+        assert(params.getOrientation.func and type(params.getOrientation.func) == "string", errHeader.."getOrientation.func must be the string name of the function you wish to call")
+        attachTokens[params.name]._getOrientation = attachTokens[params.name].getOrientation
+        attachTokens[params.name].getOrientation = function(tokenObj, planetName, system)
+            local callData = attachTokens[tokenObj.getName()]._getOrientation or {}
+            local callObj = callData.obj ~= nil and callData.obj or getObjectFromGUID(callData.guid)
+            if not callObj then return end
+
+            callData.obj = callObj
+            callObj.call(callData.func, {tokenObj = tokenObj, planetName = planetName, system = system})
+        end
+    end
+
+    if params.fetchedBy then
+        local cards = type(params.fetchedBy) == "string" and {params.fetchedBy} or params.fetchedBy
+        assert(type(cards) == "table", "TI4_EXPLORE_HELPER.injectAttachmentToken() inject failed: params.fetchedBy must be a string or table.")
+
+        for _,each in ipairs(cards) do
+            if exploreCards[each] then
+                table.insert(exploreCards[each].pull, params.name)
+            else
+                exploreCards[each] = {pull = {params.name}}
+            end
+        end
+    end
+end
+
+--- Add a card that can fetch tokens from the 'Exploration Bag' (Fetchable objects must be placed in that bag)
+--- @param params.name string : The name of the card
+--- @param params.tokens string|table : The name, or an array of names of the tokens this card will fetch
+--- @param params.drawTokenOnSpawn boolean?
+function injectAttachmentCard(params)
+    assert(params and type(params) == "table", "TI4_EXPLORE_HELPER.injectAttavhmentCard() error: Failed to provide a params table.")
+    assert(params.name, "TI4_EXPLORE_HELPER.injectAttavhmentCard(params) error: Failed to provide a params.name field.")
+    local entry = { drawTokensOnSpawn = params.drawTokenOnSpawn, pull = {}}
+    if params.tokens then
+        entry.pull = type(params.tokens) == "string" and {params.tokens} or copyTable(params.tokens)
+    end
+
+    exploreCards[params.name] = entry
+end
+
+--- @Depricated, use injectAttachmentToken/injectAttachmentCard instead
 --- Add a new exploration attach token.
 -- params:
 -- - cardName (string).
@@ -383,6 +453,40 @@ function getExploreTokenNames()
         end
     end
     return result
+end
+
+--- Callable by other scripts
+--- If the planet has multiple traits, provide a traitOverride or the explore will abort
+--- @param params.name string : The name of the planet to explore
+--- @param params.traitOverride? : Force a trait or specify which to use if the planet has multiple: "hazardous|industrial|cultural"
+--- @param params.guid string? : The guid of the system tile
+function explorePlanet(params)
+    assert(params)
+    local planet = type(params) == "string" and params or assert(params.name, "Failed to specify a planet name to TI4_EXPLORE_HELPER.explorePlanet()")
+    local trait, system = nil,nil
+    if type(params) == "table" then
+        trait = params.traitOverride
+        system = params.guid
+    end
+
+    local function _getSystem()
+        local systems = _systemHelper.systems()
+        for GUID,each in pairs(systems or {}) do
+            for _,each in ipairs(each.planets or {}) do
+                if each.name == planet then
+                    return GUID
+                end
+            end
+        end
+    end
+    
+    system = system or _getSystem()
+    if not system then
+        print("TI4_EXPLORE_HELPER error: Call to explore ", planet, " failed: could not find its system.")
+        return
+    end
+
+    _explorePlanet(system, planet, trait)
 end
 
 -------------------------------------------------------------------------------
@@ -632,7 +736,7 @@ function applyExplorationGoodness(object)
             local function exploreTokenPlanet(asTrait)
                 local system = _systemHelper.systemFromPosition(object.getPosition())
                 if system then
-                    explorePlanet(system.guid, planetName, asTrait)
+                    _explorePlanet(system.guid, planetName, asTrait)
                 else
                     printToAll(planetName ..' not attached to a system, cannot explore', 'Red')
                 end
@@ -656,7 +760,7 @@ function applyExplorationGoodness(object)
             if planet then
                 local capitalized = string.gsub(traitOverride, "^%l", string.upper)
                 printToAll('Titan Note Token using ' .. capitalized, 'Yellow')
-                explorePlanet(system.guid, planet.name, traitOverride)
+                _explorePlanet(system.guid, planet.name, traitOverride)
             else
                 printToAll('Titan Note Token not attached to a planet, cannot explore', 'Red')
             end
@@ -672,10 +776,10 @@ function applyExplorationGoodness(object)
             for i, planet in ipairs(system.planets) do
                 if planet.trait ~= nil then
                     if type(planet.trait) == "string" then
-                        object.addContextMenuItem('Explore ' .. planet.name, function() explorePlanet(object.getGUID(), planet.name) end, false)
+                        object.addContextMenuItem('Explore ' .. planet.name, function() _explorePlanet(object.getGUID(), planet.name) end, false)
                     elseif type(planet.trait) == "table" then
                         for _,each in ipairs(planet.trait) do
-                            object.addContextMenuItem(getMultiTraitLabel(planet.name, each, _pCount), function() explorePlanet(object.getGUID(), planet.name, each) end, false)
+                            object.addContextMenuItem(getMultiTraitLabel(planet.name, each, _pCount), function() _explorePlanet(object.getGUID(), planet.name, each) end, false)
                         end
                     end
                 end
@@ -689,7 +793,7 @@ function applyFrontierGoodness(object)
     object.addContextMenuItem('Explore Frontier', function() exploreFrontier(object) end, false)
 end
 
-function explorePlanet(tileGUID, planetName, traitOverride)
+function _explorePlanet(tileGUID, planetName, traitOverride)
     local systemList = _systemHelper.systems()
     assert(systemList[tileGUID] and type(systemList[tileGUID].planets) == "table", "Error: Exploring a planet in a system with no planet data.")
     local planetTrait = false

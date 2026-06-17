@@ -269,8 +269,8 @@ local _unitOverrides = {
 	['Eanautic'] = { override = 'Mech', production = 1, },
 	['Viper EX-23'] = { override = 'Mech', },
     ----- Units
-    ['4X4IC "Helios" VI'] = { override = 'Space Dock' },
-    ['4X4IC "Helios" V2'] = { upgrade = 'Space Dock', production = -4, },
+    ['4X41C "Helios" VI'] = { override = 'Space Dock' },
+    ['4X41C "Helios" V2'] = { upgrade = 'Space Dock', production = -4, },
 	['Linkship I'] = { override = 'Destroyer', spaceCombat = { hit = 9 }, antiFighterBarrage = { dice = 2, hit = 9}, spaceCannon = { dice = 0, hit = 10, requireLink = 1, extraDice = 0 }, },
 	['Linkship II'] = { upgrade = 'Destroyer', spaceCombat = { hit = 8 }, antiFighterBarrage = { dice = 3, hit = 6}, spaceCannon = { dice = 0, hit = 10, requireLink = 0, extraDice = 0 }, },	
 	['Exile I'] = { override = 'Destroyer', spaceCombat = { hit = 8 }, antiFighterBarrage = { dice = 2, hit = 9}, },
@@ -2456,15 +2456,12 @@ function _getObjectNameToUnitData()
 
     -- Add flagships.  Do not know the color (and may change).
     for _, faction in pairs(_factionHelper.allFactions(true)) do
-        --The 3 Keleres factions share the same flag; only override hash if the next Keleres faction has a color (which means it is the one in play)
-        if(not _objectNameToUnitData[faction.flagship] or faction.color) then
-            _objectNameToUnitData[faction.flagship] = {
-                tag = 'Generic',
-                unitType = 'Flagship',
-                count = 1,
-                factionTokenName = faction.tokenName
-            }
-        end
+        _objectNameToUnitData[faction.flagship] = {
+            tag = 'Generic',
+            unitType = 'Flagship',
+            count = 1,
+            factionTokenName = faction.tokenName
+        }
     end
 
     -- Add units.

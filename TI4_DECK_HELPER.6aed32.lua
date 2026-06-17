@@ -1317,7 +1317,13 @@ function injectCard(params)
         transform = {},
         deckName = params.deckName,
         factionName = params.factionName,
+        cardNames = {}
     }
+    local cardAttrs = { score = params.score, purge = params.purge }
+    _cardNameToCardAttributes[params.cardName] = cardAttrs
+
+    _cardNameToDeckAttributes[params.cardName].cardNames.Injected = _cardNameToDeckAttributes[params.cardName].cardNames.Injected or {}
+    _cardNameToDeckAttributes[params.cardName].cardNames.Injected[params.cardName] = copyTable(cardAttrs)
 end
 
 --- Add a homebrew deck.
